@@ -1,0 +1,10 @@
+torch
+torchtext
+pytorch-lightning
+tensorboard
+numpy
+matplotlib
+pandas
+pillow==8.3.1
+seaborn
+spacy
