@@ -9,6 +9,9 @@ from torch.utils.data import DataLoader
 from torchvision.datasets.mnist import MNIST
 from torchvision.transforms import ToTensor
 
+np.random.seed(0)
+torch.manual_seed(0)
+
 
 class MyViT(nn.Module):
     def __init__(self, input_shape, n_patches=7, hidden_d=8, n_heads=2, out_d=10):

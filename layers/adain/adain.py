@@ -4,8 +4,6 @@ import torch.nn as nn
 import numpy as np
 from PIL import Image
 
-import matplotlib.pyplot as plt
-
 
 def show_tensor_image(tensor):
     Image.fromarray((tensor.numpy() * 255).astype(np.uint8)).show()
