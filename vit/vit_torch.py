@@ -66,11 +66,11 @@ class MyViT(nn.Module):
         # Running linear layer for tokenization
         tokens = self.linear_mapper(patches)
 
-        # Adding positional embedding
-        tokens += get_positional_embeddings(self.n_patches ** 2, self.hidden_d).repeat(n, 1, 1)
-
         # Adding classification token to the tokens
         tokens = torch.stack([torch.vstack((self.class_token, tokens[i])) for i in range(len(tokens))])
+
+        # Adding positional embedding
+        tokens += get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).repeat(n, 1, 1)
 
         # TRANSFORMER ENCODER BEGINS ###################################
         # NOTICE: MULTIPLE ENCODER BLOCKS CAN BE STACKED TOGETHER ######
