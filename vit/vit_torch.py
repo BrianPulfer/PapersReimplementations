@@ -142,7 +142,7 @@ def main():
     test_loader = DataLoader(test_set, shuffle=False, batch_size=16)
 
     # Defining model and training options
-    model = MyViT((1, 28, 28), n_patches=7, hidden_d=20, n_heads=2, out_d=10)
+    model = MyViT((1, 28, 28), n_patches=7, hidden_d=8, n_heads=2, out_d=10)
     N_EPOCHS = 5
     LR = 0.01
 
