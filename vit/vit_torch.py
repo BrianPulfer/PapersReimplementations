@@ -31,11 +31,11 @@ class MyViT(nn.Module):
         self.input_d = int(input_shape[0] * self.patch_size[0] * self.patch_size[1])
         self.linear_mapper = nn.Linear(self.input_d, self.hidden_d)
 
-        # 2) Positional embedding
-        # (In forward method)
-
-        # 3) Classification token
+        # 2) Classification token
         self.class_token = nn.Parameter(torch.rand(1, self.hidden_d))
+
+        # 3) Positional embedding
+        # (In forward method)
 
         # 4a) Layer normalization 1
         self.ln1 = nn.LayerNorm((self.n_patches ** 2 + 1, self.hidden_d))
