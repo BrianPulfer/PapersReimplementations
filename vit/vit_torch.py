@@ -146,7 +146,7 @@ def main():
 
     # Defining model and training options
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MyViT((1, 28, 28), n_patches=7, hidden_d=20, n_heads=2, out_d=10, device=device)
+    model = MyViT((1, 28, 28), n_patches=7, hidden_d=20, n_heads=2, out_d=10, device=device).to(device)
     N_EPOCHS = 5
     LR = 0.01
 
