@@ -99,9 +99,9 @@ class MyMSA(nn.Module):
         assert d % n_heads == 0, f"Can't divide dimension {d} into {n_heads} heads"
 
         d_head = int(d / n_heads)
-        self.q_mappings = [nn.Linear(d_head, d_head) for _ in range(self.n_heads)]
-        self.k_mappings = [nn.Linear(d_head, d_head) for _ in range(self.n_heads)]
-        self.v_mappings = [nn.Linear(d_head, d_head) for _ in range(self.n_heads)]
+        self.q_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.k_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.v_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
         self.d_head = d_head
         self.softmax = nn.Softmax(dim=-1)
 
