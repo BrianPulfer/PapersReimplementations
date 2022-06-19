@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import numpy as np
 
 from tqdm import tqdm
@@ -13,6 +14,22 @@ from torchvision.transforms import ToTensor
 
 np.random.seed(0)
 torch.manual_seed(0)
+
+
+def patchify(images, n_patches):
+    n, c, h, w = images.shape
+
+    assert h == w, "Patchify method is implemented for square images only"
+
+    patches = torch.zeros(n, n_patches ** 2, h * w // n_patches ** 2)
+    patch_size = h // n_patches
+
+    for idx, image in enumerate(images):
+        for i in range(h // n_patches):
+            for j in range(w // n_patches):
+                patch = image[:, i * patch_size: (i + 1) * patch_size, j * patch_size: (j + 1) * patch_size]
+                patches[idx, i * n_patches + j] = patch.flatten()
+    return patches
 
 
 class MyViT(nn.Module):
@@ -64,7 +81,7 @@ class MyViT(nn.Module):
     def forward(self, images):
         # Dividing images into patches
         n, c, w, h = images.shape
-        patches = images.reshape(n, self.n_patches ** 2, self.input_d)
+        patches = patchify(images, self.n_patches)
 
         # Running linear layer for tokenization
         tokens = self.linear_mapper(patches)
@@ -155,7 +172,7 @@ def main():
     criterion = CrossEntropyLoss()
     for epoch in tqdm(range(N_EPOCHS), desc="Training"):
         train_loss = 0.0
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}", leave=False):
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}", leave=False):
             x, y = batch
             x, y = x.to(device), y.to(device)
             y_hat = model(x)
