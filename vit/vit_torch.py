@@ -1,6 +1,6 @@
 import numpy as np
 
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 import torch
 import torch.nn as nn
@@ -180,7 +180,7 @@ def main():
     # Training loop
     optimizer = Adam(model.parameters(), lr=LR)
     criterion = CrossEntropyLoss()
-    for epoch in tqdm(range(N_EPOCHS), desc="Training"):
+    for epoch in trange(N_EPOCHS, desc="Training"):
         train_loss = 0.0
         for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1} in training", leave=False):
             x, y = batch
