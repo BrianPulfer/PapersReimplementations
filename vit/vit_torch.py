@@ -98,7 +98,8 @@ class MyViT(nn.Module):
         out = tokens + self.msa(self.ln1(tokens))
 
         # Running Layer Normalization, MLP and residual connection
-        out = out + self.enc_mlp(self.ln2(out))
+        out = self.ln2(out)
+        out = out + self.enc_mlp(out)
         # TRANSFORMER ENCODER ENDS   ###################################
 
         # Getting the classification token only
