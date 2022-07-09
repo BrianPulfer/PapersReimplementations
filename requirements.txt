@@ -1,10 +1,12 @@
 torch
-torchtext
+torchvision
 pytorch-lightning
 tensorboard
 numpy
 matplotlib
 pandas
-pillow==8.3.1
+pillow
+imageio
 seaborn
 spacy
+tqdm

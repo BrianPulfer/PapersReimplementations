@@ -1,4 +1,7 @@
+import matplotlib.pyplot as plt
 import numpy as np
+
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -13,10 +16,27 @@ np.random.seed(0)
 torch.manual_seed(0)
 
 
+def patchify(images, n_patches):
+    n, c, h, w = images.shape
+
+    assert h == w, "Patchify method is implemented for square images only"
+
+    patches = torch.zeros(n, n_patches ** 2, h * w // n_patches ** 2)
+    patch_size = h // n_patches
+
+    for idx, image in enumerate(images):
+        for i in range(h // n_patches):
+            for j in range(w // n_patches):
+                patch = image[:, i * patch_size: (i + 1) * patch_size, j * patch_size: (j + 1) * patch_size]
+                patches[idx, i * n_patches + j] = patch.flatten()
+    return patches
+
+
 class MyViT(nn.Module):
-    def __init__(self, input_shape, n_patches=7, hidden_d=8, n_heads=2, out_d=10):
+    def __init__(self, input_shape, n_patches=7, hidden_d=8, n_heads=2, out_d=10, device=None):
         # Super constructor
         super(MyViT, self).__init__()
+        self.device = device
 
         # Input and patches sizes
         self.input_shape = input_shape
@@ -61,7 +81,7 @@ class MyViT(nn.Module):
     def forward(self, images):
         # Dividing images into patches
         n, c, w, h = images.shape
-        patches = images.reshape(n, self.n_patches ** 2, self.input_d)
+        patches = patchify(images, self.n_patches)
 
         # Running linear layer for tokenization
         tokens = self.linear_mapper(patches)
@@ -70,7 +90,7 @@ class MyViT(nn.Module):
         tokens = torch.stack([torch.vstack((self.class_token, tokens[i])) for i in range(len(tokens))])
 
         # Adding positional embedding
-        tokens += get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).repeat(n, 1, 1)
+        tokens += get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).repeat(n, 1, 1).to(self.device)
 
         # TRANSFORMER ENCODER BEGINS ###################################
         # NOTICE: MULTIPLE ENCODER BLOCKS CAN BE STACKED TOGETHER ######
@@ -96,9 +116,9 @@ class MyMSA(nn.Module):
         assert d % n_heads == 0, f"Can't divide dimension {d} into {n_heads} heads"
 
         d_head = int(d / n_heads)
-        self.q_mappings = [nn.Linear(d_head, d_head) for _ in range(self.n_heads)]
-        self.k_mappings = [nn.Linear(d_head, d_head) for _ in range(self.n_heads)]
-        self.v_mappings = [nn.Linear(d_head, d_head) for _ in range(self.n_heads)]
+        self.q_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.k_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.v_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
         self.d_head = d_head
         self.softmax = nn.Softmax(dim=-1)
 
@@ -142,21 +162,23 @@ def main():
     test_loader = DataLoader(test_set, shuffle=False, batch_size=16)
 
     # Defining model and training options
-    model = MyViT((1, 28, 28), n_patches=7, hidden_d=8, n_heads=2, out_d=10)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = MyViT((1, 28, 28), n_patches=7, hidden_d=20, n_heads=2, out_d=10, device=device).to(device)
     N_EPOCHS = 5
     LR = 0.01
 
     # Training loop
     optimizer = Adam(model.parameters(), lr=LR)
     criterion = CrossEntropyLoss()
-    for epoch in range(N_EPOCHS):
+    for epoch in tqdm(range(N_EPOCHS), desc="Training"):
         train_loss = 0.0
-        for batch in train_loader:
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}", leave=False):
             x, y = batch
+            x, y = x.to(device), y.to(device)
             y_hat = model(x)
             loss = criterion(y_hat, y) / len(x)
 
-            train_loss += loss.item()
+            train_loss += loss.detach().cpu().item()
 
             optimizer.zero_grad()
             loss.backward()
@@ -167,13 +189,14 @@ def main():
     # Test loop
     correct, total = 0, 0
     test_loss = 0.0
-    for batch in test_loader:
+    for batch in tqdm(test_loader, desc="Testing"):
         x, y = batch
+        x, y = x.to(device), y.to(device)
         y_hat = model(x)
         loss = criterion(y_hat, y) / len(x)
-        test_loss += loss
+        test_loss += loss.detach().cpu().item()
 
-        correct += torch.sum(torch.argmax(y_hat, dim=1) == y).item()
+        correct += torch.sum(torch.argmax(y_hat, dim=1) == y).detach().cpu().item()
         total += len(x)
     print(f"Test loss: {test_loss:.2f}")
     print(f"Test accuracy: {correct / total * 100:.2f}%")
