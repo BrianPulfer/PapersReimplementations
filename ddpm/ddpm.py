@@ -198,6 +198,9 @@ def main():
     args = vars(parser.parse_args())
     print(args)
 
+    # Model store path
+    store_path = "ddpm_fashion.pt" if args["fashion"] else "ddpm_mnist.pt"
+
     # Loading the data (converting each image into a tensor and normalizing between [-1, 1])
     transform = Compose([
         ToTensor(),
@@ -216,7 +219,7 @@ def main():
     ddpm = MyDDPM(MyUNet(n_steps), n_steps=n_steps, min_beta=min_beta, max_beta=max_beta, device=device)
 
     # Optionally, load a pre-trained model that will be further trained
-    # ddpm.load_state_dict(torch.load(STORE_PATH, map_location=device))
+    # ddpm.load_state_dict(torch.load(store_path, map_location=device))
 
     # Optionally, show a batch of regular images
     # show_first_batch(loader)
@@ -229,7 +232,6 @@ def main():
     # show_images(generated, "Images generated before training")
 
     # Training
-    store_path = "ddpm_fashion.pt" if args["fashion"] else "ddpm_mnist.pt"
     if not args["no_train"]:
         n_epochs, lr = args["epochs"], args["lr"]
         training_loop(ddpm, loader, n_epochs, optim=Adam(ddpm.parameters(), lr), device=device, store_path=store_path)
