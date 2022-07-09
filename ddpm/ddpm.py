@@ -228,7 +228,7 @@ def main():
     # show_forward(ddpm, loader, device)
 
     # Optionally, show the denoising (backward) process
-    # generated = generate_new_images(ddpm)
+    # generated = generate_new_images(ddpm, gif_name="before_training.gif")
     # show_images(generated, "Images generated before training")
 
     # Training
