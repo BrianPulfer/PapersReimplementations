@@ -118,7 +118,7 @@ def generate_new_images(ddpm, n_samples=16, device=None, frames_per_gif=100, gif
                 x = x + sigma_t * z
 
             # Adding frames to the GIF
-            if idx in frame_idxs:
+            if idx in frame_idxs or t == 0:
                 # Putting digits in range [0, 255]
                 normalized = x.clone()
                 for i in range(len(normalized)):
