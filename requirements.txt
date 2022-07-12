@@ -10,3 +10,4 @@ imageio
 seaborn
 spacy
 tqdm
+einops
