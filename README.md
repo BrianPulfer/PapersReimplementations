@@ -12,6 +12,6 @@ The MNIST dataset is used as a toy example for classification task.
 ## Package ddpm
 Implementation of the _Denoising Diffusion Probabilistic Models_"" [paper](https://arxiv.org/abs/2006.11239).
 I use MNIST and FashionMNIST dataset as toy examples. The model used is a custom U-Net like architecture with the use of positional embeddings.
-Pre-trained models for both datasets (20 epochs only) are provided in the package (not good practice, I know 😅).
+Pre-trained models for both datasets (20 epochs only) are provided in the package when using [Git Large File System](https://git-lfs.github.com/).
 
-<center><img src="./ddpm/mnist.gif" /> <img src="./ddpm/fashion.gif" /></center>
+<img src="./ddpm/both.gif" />
