@@ -25,8 +25,8 @@ def patchify(images, n_patches):
     patch_size = h // n_patches
 
     for idx, image in enumerate(images):
-        for i in range(h // n_patches):
-            for j in range(w // n_patches):
+        for i in range(n_patches):
+            for j in range(n_patches):
                 patch = image[:, i * patch_size: (i + 1) * patch_size, j * patch_size: (j + 1) * patch_size]
                 patches[idx, i * n_patches + j] = patch.flatten()
     return patches
