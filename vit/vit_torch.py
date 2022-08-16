@@ -39,7 +39,7 @@ class MyViT(nn.Module):
         self.device = device
 
         # Input and patches sizes
-        self.input_shape = input_shape
+        self.input_shape = input_shape # ( C , H , W )
         self.n_patches = n_patches
         self.n_heads = n_heads
         assert input_shape[1] % n_patches == 0, "Input shape not entirely divisible by number of patches"
@@ -49,6 +49,7 @@ class MyViT(nn.Module):
 
         # 1) Linear mapper
         self.input_d = int(input_shape[0] * self.patch_size[0] * self.patch_size[1])
+
         self.linear_mapper = nn.Linear(self.input_d, self.hidden_d)
 
         # 2) Classification token
@@ -59,6 +60,8 @@ class MyViT(nn.Module):
 
         # 4a) Layer normalization 1
         self.ln1 = nn.LayerNorm((self.n_patches ** 2 + 1, self.hidden_d))
+        # +1 for that special token
+
 
         # 4b) Multi-head Self Attention (MSA) and classification token
         self.msa = MyMSA(self.hidden_d, n_heads)
@@ -82,15 +85,39 @@ class MyViT(nn.Module):
         # Dividing images into patches
         n, c, w, h = images.shape
         patches = patchify(images, self.n_patches)
-
+        '''
+        Each image has ( n_patches * n_patches ) sub-images, arranged 
+        as a sequence, where each sub-image is flattened into 
+        a ( C * patch_size[0] * patch_size[0] ) vector .
+        Now the patches like this (for one image) :
+            [ 
+               [ ... ] , # patch 1 : a vector of ( C * patch_size[0] * patch_size[0] ) elements
+               [ ... ] , # patch 2
+                 ...
+               [ ... ] , # patch  n_patches ** 2
+            ]
+        '''
         # Running linear layer for tokenization
+        # Map the vector corresponding to each patch to the hidden size dimension
         tokens = self.linear_mapper(patches)
 
         # Adding classification token to the tokens
         tokens = torch.stack([torch.vstack((self.class_token, tokens[i])) for i in range(len(tokens))])
+        '''
+        Now the tokens like this (for one image) :
+            [ 
+               [ ... ] , # the  special token 
+               [ ... ] , # patch 1 : a vector of *hidden-size* elements
+               [ ... ] , # patch 2
+                 ...
+               [ ... ] , # patch  n_patches ** 2
+            ]
+        '''
 
         # Adding positional embedding
-        tokens += get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).repeat(n, 1, 1).to(self.device)
+        # Repeat the operation n times for each sequence in the batch
+        tokens += get_positional_embeddings(
+            self.n_patches ** 2 + 1, self.hidden_d).repeat(n, 1, 1).to(self.device)
 
         # TRANSFORMER ENCODER BEGINS ###################################
         # NOTICE: MULTIPLE ENCODER BLOCKS CAN BE STACKED TOGETHER ######
@@ -103,8 +130,18 @@ class MyViT(nn.Module):
 
         # Getting the classification token only
         out = out[:, 0]
-
-        return self.mlp(out)
+        '''
+        Now the out like this  :
+           for one image :  [ ... ] , # a vector of *hidden-size* elements
+           for  a  batch :  
+                           [ 
+                               [ ... ] , # for image 1
+                               [ ... ] , # for image 2
+                                 ...
+                               [ ... ] , # for image n_batch
+                            ]
+        '''
+        return self.mlp(out) # Map to output dimension, output category distribution
 
 
 class MyMSA(nn.Module):
@@ -158,8 +195,8 @@ def main():
     train_set = MNIST(root='./../datasets', train=True, download=True, transform=transform)
     test_set = MNIST(root='./../datasets', train=False, download=True, transform=transform)
 
-    train_loader = DataLoader(train_set, shuffle=True, batch_size=16)
-    test_loader = DataLoader(test_set, shuffle=False, batch_size=16)
+    train_loader = DataLoader(train_set, shuffle=True, batch_size=128)
+    test_loader = DataLoader(test_set, shuffle=False, batch_size=128)
 
     # Defining model and training options
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -172,7 +209,7 @@ def main():
     criterion = CrossEntropyLoss()
     for epoch in tqdm(range(N_EPOCHS), desc="Training"):
         train_loss = 0.0
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1}", leave=False):
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1} in training", leave=False):
             x, y = batch
             x, y = x.to(device), y.to(device)
             y_hat = model(x)
@@ -186,20 +223,22 @@ def main():
 
         print(f"Epoch {epoch + 1}/{N_EPOCHS} loss: {train_loss:.2f}")
 
-    # Test loop
-    correct, total = 0, 0
-    test_loss = 0.0
-    for batch in tqdm(test_loader, desc="Testing"):
-        x, y = batch
-        x, y = x.to(device), y.to(device)
-        y_hat = model(x)
-        loss = criterion(y_hat, y) / len(x)
-        test_loss += loss.detach().cpu().item()
+        # Test loop
+        with torch.no_grad():
 
-        correct += torch.sum(torch.argmax(y_hat, dim=1) == y).detach().cpu().item()
-        total += len(x)
-    print(f"Test loss: {test_loss:.2f}")
-    print(f"Test accuracy: {correct / total * 100:.2f}%")
+            correct, total = 0, 0
+            test_loss = 0.0
+            for batch in tqdm(test_loader, desc="Testing"):
+                x, y = batch
+                x, y = x.to(device), y.to(device)
+                y_hat = model(x)
+                loss = criterion(y_hat, y) / len(x)
+                test_loss += loss.detach().cpu().item()
+
+                correct += torch.sum(torch.argmax(y_hat, dim=1) == y).detach().cpu().item()
+                total += len(x)
+            print(f"Test loss: {test_loss:.2f}")
+            print(f"Test accuracy: {correct / total * 100:.2f}%")
 
 
 if __name__ == '__main__':
