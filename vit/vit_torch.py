@@ -84,7 +84,7 @@ class MyViT(nn.Module):
     def forward(self, images):
         # Dividing images into patches
         n, c, w, h = images.shape
-        patches = patchify(images, self.n_patches)
+        patches = patchify(images, self.n_patches).to(self.device)
         '''
         Each image has ( n_patches * n_patches ) sub-images, arranged 
         as a sequence, where each sub-image is flattened into 
