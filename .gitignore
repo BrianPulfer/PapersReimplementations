@@ -1,4 +1,6 @@
 .DS_Store
+*__pycache__
 
 ddpm/datasets/
 .idea
+
