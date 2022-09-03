@@ -207,7 +207,7 @@ def main():
         Lambda(lambda x: (x - 0.5) * 2)]
     )
     ds_fn = MNIST if not args["fashion"] else FashionMNIST
-    dataset = ds_fn("./datasets", download=True, train=True, transform=transform)
+    dataset = ds_fn("./../datasets", download=True, train=True, transform=transform)
     loader = DataLoader(dataset, args["bs"], shuffle=True)
 
     # Getting device
