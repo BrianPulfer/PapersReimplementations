@@ -1,16 +1,16 @@
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 from torch.optim import Adam
+from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
 
-from torchvision.datasets.mnist import MNIST
 from torchvision.transforms import ToTensor
+from torchvision.datasets.mnist import MNIST
 
 np.random.seed(0)
 torch.manual_seed(0)
@@ -32,50 +32,95 @@ def patchify(images, n_patches):
     return patches
 
 
+class MyMSA(nn.Module):
+    def __init__(self, d, n_heads=2):
+        super(MyMSA, self).__init__()
+        self.d = d
+        self.n_heads = n_heads
+
+        assert d % n_heads == 0, f"Can't divide dimension {d} into {n_heads} heads"
+
+        d_head = int(d / n_heads)
+        self.q_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.k_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.v_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
+        self.d_head = d_head
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, sequences):
+        # Sequences has shape (N, seq_length, token_dim)
+        # We go into shape    (N, seq_length, n_heads, token_dim / n_heads)
+        # And come back to    (N, seq_length, item_dim)  (through concatenation)
+        result = []
+        for sequence in sequences:
+            seq_result = []
+            for head in range(self.n_heads):
+                q_mapping = self.q_mappings[head]
+                k_mapping = self.k_mappings[head]
+                v_mapping = self.v_mappings[head]
+
+                seq = sequence[:, head * self.d_head: (head + 1) * self.d_head]
+                q, k, v = q_mapping(seq), k_mapping(seq), v_mapping(seq)
+
+                attention = self.softmax(q @ k.T / (self.d_head ** 0.5))
+                seq_result.append(attention @ v)
+            result.append(torch.hstack(seq_result))
+        return torch.cat([torch.unsqueeze(r, dim=0) for r in result])
+
+
+class MyViTBlock(nn.Module):
+    def __init__(self, hidden_d, n_heads, mlp_ratio=4):
+        super(MyViTBlock, self).__init__()
+        self.hidden_d = hidden_d
+        self.n_heads = n_heads
+
+        self.norm1 = nn.LayerNorm(hidden_d)
+        self.mhsa = MyMSA(hidden_d, n_heads)
+        self.norm2 = nn.LayerNorm(hidden_d)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_d, mlp_ratio * hidden_d),
+            nn.GELU(),
+            nn.Linear(mlp_ratio * hidden_d, hidden_d)
+        )
+
+    def forward(self, x):
+        out = x + self.mhsa(self.norm1(x))
+        out = out + self.mlp(self.norm2(out))
+        return out
+
+
 class MyViT(nn.Module):
-    def __init__(self, input_shape, n_patches=7, hidden_d=8, n_heads=2, out_d=10, device=None):
+    def __init__(self, chw, n_patches=7, n_blocks=2, hidden_d=8, n_heads=2, out_d=10, device=None):
         # Super constructor
         super(MyViT, self).__init__()
-        self.device = device
 
-        # Input and patches sizes
-        self.input_shape = input_shape # ( C , H , W )
+        # Attributes
+        self.device = device
+        self.chw = chw # ( C , H , W )
         self.n_patches = n_patches
+        self.n_blocks = n_blocks
         self.n_heads = n_heads
-        assert input_shape[1] % n_patches == 0, "Input shape not entirely divisible by number of patches"
-        assert input_shape[2] % n_patches == 0, "Input shape not entirely divisible by number of patches"
-        self.patch_size = (input_shape[1] / n_patches, input_shape[2] / n_patches)
         self.hidden_d = hidden_d
 
-        # 1) Linear mapper
-        self.input_d = int(input_shape[0] * self.patch_size[0] * self.patch_size[1])
+        # Input and patches sizes
+        assert chw[1] % n_patches == 0, "Input shape not entirely divisible by number of patches"
+        assert chw[2] % n_patches == 0, "Input shape not entirely divisible by number of patches"
+        self.patch_size = (chw[1] / n_patches, chw[2] / n_patches)
 
+        # 1) Linear mapper
+        self.input_d = int(chw[0] * self.patch_size[0] * self.patch_size[1])
         self.linear_mapper = nn.Linear(self.input_d, self.hidden_d)
 
-        # 2) Classification token
+        # 2) Learnable classification token
         self.class_token = nn.Parameter(torch.rand(1, self.hidden_d))
 
         # 3) Positional embedding
         # (In forward method)
+        
+        # 4) Transformer encoder blocks
+        self.blocks = nn.ModuleList([MyViTBlock(hidden_d, n_heads) for _ in range(n_blocks)])
 
-        # 4a) Layer normalization 1
-        self.ln1 = nn.LayerNorm((self.n_patches ** 2 + 1, self.hidden_d))
-        # +1 for that special token
-
-
-        # 4b) Multi-head Self Attention (MSA) and classification token
-        self.msa = MyMSA(self.hidden_d, n_heads)
-
-        # 5a) Layer normalization 2
-        self.ln2 = nn.LayerNorm((self.n_patches ** 2 + 1, self.hidden_d))
-
-        # 5b) Encoder MLP
-        self.enc_mlp = nn.Sequential(
-            nn.Linear(self.hidden_d, self.hidden_d),
-            nn.ReLU()
-        )
-
-        # 6) Classification MLP
+        # 5) Classification MLPk
         self.mlp = nn.Sequential(
             nn.Linear(self.hidden_d, out_d),
             nn.Softmax(dim=-1)
@@ -115,18 +160,12 @@ class MyViT(nn.Module):
         '''
 
         # Adding positional embedding
-        # Repeat the operation n times for each sequence in the batch
-        tokens += get_positional_embeddings(
-            self.n_patches ** 2 + 1, self.hidden_d).repeat(n, 1, 1).to(self.device)
+        pos_embed = get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).repeat(n, 1, 1).to(self.device)
+        out = tokens + pos_embed
 
-        # TRANSFORMER ENCODER BEGINS ###################################
-        # NOTICE: MULTIPLE ENCODER BLOCKS CAN BE STACKED TOGETHER ######
-        # Running Layer Normalization, MSA and residual connection
-        out = tokens + self.msa(self.ln1(tokens))
-
-        # Running Layer Normalization, MLP and residual connection
-        out = out + self.enc_mlp(self.ln2(out))
-        # TRANSFORMER ENCODER ENDS   ###################################
+        # Transformer Blocks
+        for block in self.blocks:
+            out = block(out)
 
         # Getting the classification token only
         out = out[:, 0]
@@ -142,42 +181,6 @@ class MyViT(nn.Module):
                             ]
         '''
         return self.mlp(out) # Map to output dimension, output category distribution
-
-
-class MyMSA(nn.Module):
-    def __init__(self, d, n_heads=2):
-        super(MyMSA, self).__init__()
-        self.d = d
-        self.n_heads = n_heads
-
-        assert d % n_heads == 0, f"Can't divide dimension {d} into {n_heads} heads"
-
-        d_head = int(d / n_heads)
-        self.q_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
-        self.k_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
-        self.v_mappings = nn.ModuleList([nn.Linear(d_head, d_head) for _ in range(self.n_heads)])
-        self.d_head = d_head
-        self.softmax = nn.Softmax(dim=-1)
-
-    def forward(self, sequences):
-        # Sequences has shape (N, seq_length, token_dim)
-        # We go into shape    (N, seq_length, n_heads, token_dim / n_heads)
-        # And come back to    (N, seq_length, item_dim)  (through concatenation)
-        result = []
-        for sequence in sequences:
-            seq_result = []
-            for head in range(self.n_heads):
-                q_mapping = self.q_mappings[head]
-                k_mapping = self.k_mappings[head]
-                v_mapping = self.v_mappings[head]
-
-                seq = sequence[:, head * self.d_head: (head + 1) * self.d_head]
-                q, k, v = q_mapping(seq), k_mapping(seq), v_mapping(seq)
-
-                attention = self.softmax(q @ k.T / (self.d_head ** 0.5))
-                seq_result.append(attention @ v)
-            result.append(torch.hstack(seq_result))
-        return torch.cat([torch.unsqueeze(r, dim=0) for r in result])
 
 
 def get_positional_embeddings(sequence_length, d):
@@ -200,7 +203,8 @@ def main():
 
     # Defining model and training options
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MyViT((1, 28, 28), n_patches=7, hidden_d=20, n_heads=2, out_d=10, device=device).to(device)
+    print("Using device: ", device, f"({torch.cuda.get_device_name(device)})" if torch.cuda.is_available() else "")
+    model = MyViT((1, 28, 28), n_patches=7, n_blocks=3, hidden_d=8, n_heads=2, out_d=10, device=device).to(device)
     N_EPOCHS = 5
     LR = 0.01
 
@@ -213,9 +217,9 @@ def main():
             x, y = batch
             x, y = x.to(device), y.to(device)
             y_hat = model(x)
-            loss = criterion(y_hat, y) / len(x)
+            loss = criterion(y_hat, y)
 
-            train_loss += loss.detach().cpu().item()
+            train_loss += loss.detach().cpu().item() / len(train_loader)
 
             optimizer.zero_grad()
             loss.backward()
@@ -223,22 +227,21 @@ def main():
 
         print(f"Epoch {epoch + 1}/{N_EPOCHS} loss: {train_loss:.2f}")
 
-        # Test loop
-        with torch.no_grad():
+    # Test loop
+    with torch.no_grad():
+        correct, total = 0, 0
+        test_loss = 0.0
+        for batch in tqdm(test_loader, desc="Testing"):
+            x, y = batch
+            x, y = x.to(device), y.to(device)
+            y_hat = model(x)
+            loss = criterion(y_hat, y)
+            test_loss += loss.detach().cpu().item() / len(test_loader)
 
-            correct, total = 0, 0
-            test_loss = 0.0
-            for batch in tqdm(test_loader, desc="Testing"):
-                x, y = batch
-                x, y = x.to(device), y.to(device)
-                y_hat = model(x)
-                loss = criterion(y_hat, y) / len(x)
-                test_loss += loss.detach().cpu().item()
-
-                correct += torch.sum(torch.argmax(y_hat, dim=1) == y).detach().cpu().item()
-                total += len(x)
-            print(f"Test loss: {test_loss:.2f}")
-            print(f"Test accuracy: {correct / total * 100:.2f}%")
+            correct += torch.sum(torch.argmax(y_hat, dim=1) == y).detach().cpu().item()
+            total += len(x)
+        print(f"Test loss: {test_loss:.2f}")
+        print(f"Test accuracy: {correct / total * 100:.2f}%")
 
 
 if __name__ == '__main__':
