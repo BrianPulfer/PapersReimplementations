@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 
 from tqdm import tqdm
 
@@ -90,18 +89,17 @@ class MyViTBlock(nn.Module):
 
 
 class MyViT(nn.Module):
-    def __init__(self, chw, n_patches=7, n_blocks=2, hidden_d=8, n_heads=2, out_d=10, device=None):
+    def __init__(self, chw, n_patches=7, n_blocks=2, hidden_d=8, n_heads=2, out_d=10):
         # Super constructor
         super(MyViT, self).__init__()
-
+        
         # Attributes
-        self.device = device
         self.chw = chw # ( C , H , W )
         self.n_patches = n_patches
         self.n_blocks = n_blocks
         self.n_heads = n_heads
         self.hidden_d = hidden_d
-
+        
         # Input and patches sizes
         assert chw[1] % n_patches == 0, "Input shape not entirely divisible by number of patches"
         assert chw[2] % n_patches == 0, "Input shape not entirely divisible by number of patches"
@@ -110,16 +108,17 @@ class MyViT(nn.Module):
         # 1) Linear mapper
         self.input_d = int(chw[0] * self.patch_size[0] * self.patch_size[1])
         self.linear_mapper = nn.Linear(self.input_d, self.hidden_d)
-
+        
         # 2) Learnable classification token
         self.class_token = nn.Parameter(torch.rand(1, self.hidden_d))
-
+        
         # 3) Positional embedding
-        # (In forward method)
+        self.pos_embed = nn.Parameter(get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).clone())
+        self.pos_embed.requires_grad = False
         
         # 4) Transformer encoder blocks
         self.blocks = nn.ModuleList([MyViTBlock(hidden_d, n_heads) for _ in range(n_blocks)])
-
+        
         # 5) Classification MLPk
         self.mlp = nn.Sequential(
             nn.Linear(self.hidden_d, out_d),
@@ -128,59 +127,29 @@ class MyViT(nn.Module):
 
     def forward(self, images):
         # Dividing images into patches
-        n, c, w, h = images.shape
-        patches = patchify(images, self.n_patches).to(self.device)
-        '''
-        Each image has ( n_patches * n_patches ) sub-images, arranged 
-        as a sequence, where each sub-image is flattened into 
-        a ( C * patch_size[0] * patch_size[0] ) vector .
-        Now the patches like this (for one image) :
-            [ 
-               [ ... ] , # patch 1 : a vector of ( C * patch_size[0] * patch_size[0] ) elements
-               [ ... ] , # patch 2
-                 ...
-               [ ... ] , # patch  n_patches ** 2
-            ]
-        '''
-        # Running linear layer for tokenization
+        n, c, h, w = images.shape
+        patches = patchify(images, self.n_patches).to(self.pos_embed.device)
+        
+        # Running linear layer tokenization
         # Map the vector corresponding to each patch to the hidden size dimension
         tokens = self.linear_mapper(patches)
-
+        
         # Adding classification token to the tokens
         tokens = torch.stack([torch.vstack((self.class_token, tokens[i])) for i in range(len(tokens))])
-        '''
-        Now the tokens like this (for one image) :
-            [ 
-               [ ... ] , # the  special token 
-               [ ... ] , # patch 1 : a vector of *hidden-size* elements
-               [ ... ] , # patch 2
-                 ...
-               [ ... ] , # patch  n_patches ** 2
-            ]
-        '''
-
+        
         # Adding positional embedding
-        pos_embed = get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).repeat(n, 1, 1).to(self.device)
+        pos_embed = self.pos_embed.repeat(n, 1, 1)
         out = tokens + pos_embed
-
+        
         # Transformer Blocks
         for block in self.blocks:
             out = block(out)
-
+            
         # Getting the classification token only
         out = out[:, 0]
-        '''
-        Now the out like this  :
-           for one image :  [ ... ] , # a vector of *hidden-size* elements
-           for  a  batch :  
-                           [ 
-                               [ ... ] , # for image 1
-                               [ ... ] , # for image 2
-                                 ...
-                               [ ... ] , # for image n_batch
-                            ]
-        '''
+        
         return self.mlp(out) # Map to output dimension, output category distribution
+    
 
 
 def get_positional_embeddings(sequence_length, d):
@@ -204,9 +173,9 @@ def main():
     # Defining model and training options
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device: ", device, f"({torch.cuda.get_device_name(device)})" if torch.cuda.is_available() else "")
-    model = MyViT((1, 28, 28), n_patches=7, n_blocks=3, hidden_d=8, n_heads=2, out_d=10, device=device).to(device)
+    model = MyViT((1, 28, 28), n_patches=7, n_blocks=2, hidden_d=8, n_heads=2, out_d=10).to(device)
     N_EPOCHS = 5
-    LR = 0.01
+    LR = 0.005
 
     # Training loop
     optimizer = Adam(model.parameters(), lr=LR)
