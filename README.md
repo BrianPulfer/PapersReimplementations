@@ -12,5 +12,6 @@ Check out the [Blog](https://medium.com/mlearning-ai/enerating-images-with-ddpms
 
 ## Package vit
 <img src="./vit/architecture.png" />
+
 Implementation of the "_An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale_" [paper](https://openreview.net/forum?id=YicbFdNTTy).
 The MNIST dataset is used as a toy example for classification task. [Blog](https://medium.com/mlearning-ai/vision-transformers-from-scratch-pytorch-a-step-by-step-guide-96c3313c2e0c). 
