@@ -11,5 +11,7 @@ Pre-trained models for both datasets (20 epochs only) are provided in the packag
 Check out the [Blog](https://medium.com/mlearning-ai/enerating-images-with-ddpms-a-pytorch-implementation-cef5a2ba8cb1) for a step-by-step explanation.
 
 ## Package vit
+<img src="./vit/architecture.png" />
+
 Implementation of the "_An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale_" [paper](https://openreview.net/forum?id=YicbFdNTTy).
 The MNIST dataset is used as a toy example for classification task. [Blog](https://medium.com/mlearning-ai/vision-transformers-from-scratch-pytorch-a-step-by-step-guide-96c3313c2e0c). 
