@@ -134,7 +134,7 @@ class MyViT(nn.Module):
         tokens = self.linear_mapper(patches)
         
         # Adding classification token to the tokens
-        tokens = torch.stack([torch.vstack((self.class_token, tokens[i])) for i in range(len(tokens))])
+        tokens = torch.cat((self.class_token.expand(n, 1, -1), tokens), dim=1)
         
         # Adding positional embedding
         out = tokens + self.positional_embeddings.repeat(n, 1, 1)
