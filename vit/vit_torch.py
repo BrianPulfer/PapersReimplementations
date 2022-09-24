@@ -113,8 +113,7 @@ class MyViT(nn.Module):
         self.class_token = nn.Parameter(torch.rand(1, self.hidden_d))
         
         # 3) Positional embedding
-        self.pos_embed = nn.Parameter(get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).clone())
-        self.pos_embed.requires_grad = False
+        self.register_buffer('positional_embeddings', get_positional_embeddings(n_patches ** 2 + 1, hidden_d), persistent=False)
         
         # 4) Transformer encoder blocks
         self.blocks = nn.ModuleList([MyViTBlock(hidden_d, n_heads) for _ in range(n_blocks)])
@@ -128,7 +127,7 @@ class MyViT(nn.Module):
     def forward(self, images):
         # Dividing images into patches
         n, c, h, w = images.shape
-        patches = patchify(images, self.n_patches).to(self.pos_embed.device)
+        patches = patchify(images, self.n_patches).to(self.positional_embeddings.device)
         
         # Running linear layer tokenization
         # Map the vector corresponding to each patch to the hidden size dimension
@@ -138,8 +137,7 @@ class MyViT(nn.Module):
         tokens = torch.stack([torch.vstack((self.class_token, tokens[i])) for i in range(len(tokens))])
         
         # Adding positional embedding
-        pos_embed = self.pos_embed.repeat(n, 1, 1)
-        out = tokens + pos_embed
+        out = tokens + self.positional_embeddings.repeat(n, 1, 1)
         
         # Transformer Blocks
         for block in self.blocks:
