@@ -1,6 +1,6 @@
 import numpy as np
 
-from tqdm import tqdm
+from tqdm import tqdm, trange
 
 import torch
 import torch.nn as nn
@@ -113,8 +113,7 @@ class MyViT(nn.Module):
         self.class_token = nn.Parameter(torch.rand(1, self.hidden_d))
         
         # 3) Positional embedding
-        self.pos_embed = nn.Parameter(get_positional_embeddings(self.n_patches ** 2 + 1, self.hidden_d).clone())
-        self.pos_embed.requires_grad = False
+        self.register_buffer('positional_embeddings', get_positional_embeddings(n_patches ** 2 + 1, hidden_d), persistent=False)
         
         # 4) Transformer encoder blocks
         self.blocks = nn.ModuleList([MyViTBlock(hidden_d, n_heads) for _ in range(n_blocks)])
@@ -128,18 +127,17 @@ class MyViT(nn.Module):
     def forward(self, images):
         # Dividing images into patches
         n, c, h, w = images.shape
-        patches = patchify(images, self.n_patches).to(self.pos_embed.device)
+        patches = patchify(images, self.n_patches).to(self.positional_embeddings.device)
         
         # Running linear layer tokenization
         # Map the vector corresponding to each patch to the hidden size dimension
         tokens = self.linear_mapper(patches)
         
         # Adding classification token to the tokens
-        tokens = torch.stack([torch.vstack((self.class_token, tokens[i])) for i in range(len(tokens))])
+        tokens = torch.cat((self.class_token.expand(n, 1, -1), tokens), dim=1)
         
         # Adding positional embedding
-        pos_embed = self.pos_embed.repeat(n, 1, 1)
-        out = tokens + pos_embed
+        out = tokens + self.positional_embeddings.repeat(n, 1, 1)
         
         # Transformer Blocks
         for block in self.blocks:
@@ -180,7 +178,7 @@ def main():
     # Training loop
     optimizer = Adam(model.parameters(), lr=LR)
     criterion = CrossEntropyLoss()
-    for epoch in tqdm(range(N_EPOCHS), desc="Training"):
+    for epoch in trange(N_EPOCHS, desc="Training"):
         train_loss = 0.0
         for batch in tqdm(train_loader, desc=f"Epoch {epoch + 1} in training", leave=False):
             x, y = batch
