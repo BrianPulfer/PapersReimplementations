@@ -10,6 +10,12 @@ I use MNIST and FashionMNIST dataset as toy examples. The model used is a custom
 Pre-trained models for both datasets (20 epochs only) are provided in the package when using [Git Large File System](https://git-lfs.github.com/).
 Check out the [Blog](https://medium.com/mlearning-ai/enerating-images-with-ddpms-a-pytorch-implementation-cef5a2ba8cb1) for a step-by-step explanation.
 
+## Package nf
+
+Implementation of the "_Density estimation using Real NVP_" [paper](https://arxiv.org/abs/1605.08803).
+
+
+
 ## Package vit
 <img src="./vit/architecture.png" />
 
