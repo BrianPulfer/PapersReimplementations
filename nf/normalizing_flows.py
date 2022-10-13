@@ -31,7 +31,7 @@ torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
 
 def test_reversability(model, x):
-    """Tests that x ≈ model.backward(model(x)) and shows images"""
+    """Tests that x ≈ model.backward(model.forward(x)) and shows images"""
     with torch.no_grad():
         # Running input forward and backward
         z = model.forward(x)[0]
@@ -83,8 +83,9 @@ class SimpleCNN(nn.Module):
 class Dequantization(nn.Module):
     """Dequantizes the image. Dequantization is the first step for flows, as it allows to not load datapoints
     with high likelihoods and put volume on other input data as well."""
-    def __init__(self):
+    def __init__(self, max_val):
         super(Dequantization, self).__init__()
+        self.max_val = max_val
         self.eps = 1e-5
         
         # Sigmoid and its log det
@@ -97,8 +98,8 @@ class Dequantization(nn.Module):
         
     def forward(self, x):
         # Dequantizing input (adding continuous noise in range [0, 1]) and putting in range [0, 1]
-        log_det = - np.log(256) * np.prod(x.shape[1:]) * torch.ones(len(x)).to(x.device)
-        out = (x + torch.rand_like(x).detach()) / 256
+        log_det = - np.log(self.max_val) * np.prod(x.shape[1:]) * torch.ones(len(x)).to(x.device)
+        out = (x + torch.rand_like(x).detach()) / self.max_val
         
         # Making sure the input is not too close to either 0 or 1 (bounds of inverse sigmoid) --> put closer to 0.5
         log_det += np.log(1-self.eps) * np.prod(x.shape[1:])
@@ -120,9 +121,9 @@ class Dequantization(nn.Module):
         out = (out - self.eps * 0.5) / (1-self.eps)
         
         # Undoing the dequantization
-        log_det += np.log(256) * np.prod(x.shape[1:])
-        out *= 256
-        out = torch.floor(out).clamp(min=0, max=255)
+        log_det += np.log(self.max_val) * np.prod(x.shape[1:])
+        out *= self.max_val
+        out = torch.floor(out).clamp(min=0, max=self.max_val)
         
         return out, log_det
 
@@ -248,21 +249,23 @@ def main():
     
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device_log = f"Using device: {device} " + (f"({torch.cuda.get_device_name(device)})" if torch.cuda.is_available() else "")
+    print(device_log)
     
     # Creating the model
     model = Flow([
-        Dequantization(),
-        AffineCoupling(SimpleCNN(7), modify_x2=True), #AffineCoupling(GatedConvNet(1), modify_x2=True),
-        AffineCoupling(SimpleCNN(7), modify_x2=False), #AffineCoupling(GatedConvNet(1), modify_x2=False),
-        AffineCoupling(SimpleCNN(5), modify_x2=True), #AffineCoupling(GatedConvNet(1), modify_x2=True),
-        AffineCoupling(SimpleCNN(5), modify_x2=False), #AffineCoupling(GatedConvNet(1), modify_x2=False),
-        AffineCoupling(SimpleCNN(3), modify_x2=True), #AffineCoupling(GatedConvNet(1), modify_x2=True),
-        AffineCoupling(SimpleCNN(3), modify_x2=False), #AffineCoupling(GatedConvNet(1), modify_x2=False),
-        AffineCoupling(SimpleCNN(3), modify_x2=True), #AffineCoupling(GatedConvNet(1), modify_x2=True),
-        AffineCoupling(SimpleCNN(3), modify_x2=False), #AffineCoupling(GatedConvNet(1), modify_x2=False),
+        Dequantization(256),
+        AffineCoupling(GatedConvNet(1), modify_x2=True), #AffineCoupling(SimpleCNN(7), modify_x2=True),
+        AffineCoupling(GatedConvNet(1), modify_x2=False), #AffineCoupling(SimpleCNN(7), modify_x2=False),
+        AffineCoupling(GatedConvNet(1), modify_x2=True), #AffineCoupling(SimpleCNN(5), modify_x2=True),
+        AffineCoupling(GatedConvNet(1), modify_x2=False), #AffineCoupling(SimpleCNN(5), modify_x2=False),
+        AffineCoupling(GatedConvNet(1), modify_x2=True), #AffineCoupling(SimpleCNN(3), modify_x2=True),
+        AffineCoupling(GatedConvNet(1), modify_x2=False), #AffineCoupling(SimpleCNN(3), modify_x2=False),
+        AffineCoupling(GatedConvNet(1), modify_x2=True), #AffineCoupling(SimpleCNN(3), modify_x2=True),
+        AffineCoupling(GatedConvNet(1), modify_x2=False), #AffineCoupling(SimpleCNN(3), modify_x2=False),
     ]).to(device)
     
-    # Showing number of trainable params
+    # Showing number of trainable paramsk
     trainable_params = 0
     for param in model.parameters():
         trainable_params += np.prod(param.shape) if param.requires_grad else 0
