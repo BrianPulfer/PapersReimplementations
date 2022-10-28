@@ -16,17 +16,17 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from torch.optim import Adam
+from torch.optim.lr_scheduler import LinearLR
 from torch.utils.data import DataLoader
 
 from torchvision.datasets import MNIST
 from torchvision.utils import make_grid, save_image
 from torchvision.transforms import ToTensor, Compose, Lambda
 
-from borrow import GatedConvNet
-
 # Seeding
-np.random.seed(0)
-torch.random.manual_seed(0)
+SEED = 0
+np.random.seed(SEED)
+torch.random.manual_seed(SEED)
 torch.use_deterministic_algorithms(True)
 torch.backends.cudnn.deterministic = True
 
@@ -54,31 +54,61 @@ def test_reversability(model, x):
         plt.title("Reconstructed image")
         plt.show()
 
+class LayerNormChannels(nn.Module):
+    def __init__(self, c_in, eps=1e-5):
+        super().__init__()
+        self.gamma = nn.Parameter(torch.ones(1, c_in, 1, 1))
+        self.beta = nn.Parameter(torch.zeros(1, c_in, 1, 1))
+        self.eps = eps
+    
+    def forward(self, x):
+        mean = x.mean(dim=1, keepdim=True)
+        var = x.var(dim=1, unbiased=False, keepdim=True)
+        y = (x - mean) / torch.sqrt(var + self.eps)
+        y = y * self.gamma + self.beta
+        return y
 
-class SimpleCNN(nn.Module):
+class CNNBlock(nn.Module):
     """A simple CNN architecture which will applied at each Affine Coupling step"""
-    def __init__(self, kernel_size=3, dim=32):
-        super(SimpleCNN, self).__init__()
-        self.gelu = nn.GELU()
-        self.norm_in = nn.LayerNorm((1, 28, 28))
-        self.norm_hidden = nn.LayerNorm((dim, 28, 28))
+    def __init__(self, n_channels, kernel_size=3):
+        super(CNNBlock, self).__init__()
+        self.elu = nn.ELU()
         
-        self.old = nn.Parameter(torch.zeros(2, 28, 28))
-        self.new = nn.Parameter(torch.zeros(2, 28, 28))
-        
-        self.conv1 = nn.Conv2d(1, dim, kernel_size, 1, kernel_size//2)
-        self.conv2 = nn.Conv2d(dim, dim, kernel_size, 1, kernel_size//2)
-        self.conv3 = nn.Conv2d(dim, 2, kernel_size, 1, kernel_size//2)
-        
-        for conv in [self.conv1, self.conv2, self.conv3]:
-            conv.weight.data.zero_()
+        self.conv1 = nn.Conv2d(2*n_channels, n_channels, kernel_size, 1, kernel_size//2)
+        self.conv2 = nn.Conv2d(2*n_channels, 2*n_channels, 1, 1, 0)
         
     def forward(self, x):
-        out = x
-        out = self.gelu(self.conv1(self.norm_in(out)))
-        out = self.gelu(self.conv2(self.norm_hidden(out)))
-        out = self.gelu(self.conv3(self.norm_hidden(out)))
-        return self.old * x.repeat_interleave(2, 1) + self.new * torch.tanh(out)
+        out = torch.cat((self.elu(x), self.elu(-x)), dim=1)
+        out = self.conv1(out)
+        out = torch.cat((self.elu(out), self.elu(-out)), dim=1)
+        out = self.conv2(out)
+        val, gate = out.chunk(2, 1)
+        return x + val * torch.sigmoid(gate)
+    
+class SimpleCNN(nn.Module):
+    def __init__(self, blocks=3, channels_in=1, channels_hidden=32, kernel_size=3):
+        super(SimpleCNN, self).__init__()
+        
+        self.elu = nn.ELU()
+        self.conv_in = nn.Conv2d(channels_in, channels_hidden, 3, 1, 1)
+        self.net = nn.Sequential(*[
+            nn.Sequential(
+                CNNBlock(channels_hidden, kernel_size),
+                LayerNormChannels(channels_hidden)
+            )
+            for _ in range(blocks)
+            ])
+        self.conv_out = nn.Conv2d(2*channels_hidden, 2*channels_in, 3, 1, 1)
+        
+        # Initializing final convolution weights to zeros
+        self.conv_out.weight.data.zero_()
+        self.conv_out.bias.data.zero_()
+        
+    def forward(self, x):
+        out = self.net(self.conv_in(x))
+        out = torch.cat((self.elu(out), self.elu(-out)), dim=1)
+        return self.conv_out(out)
+        
 
 class Dequantization(nn.Module):
     """Dequantizes the image. Dequantization is the first step for flows, as it allows to not load datapoints
@@ -90,11 +120,11 @@ class Dequantization(nn.Module):
         
         # Sigmoid and its log det
         self.sigmoid = torch.nn.Sigmoid()
-        self.log_det_sigmoid = lambda x: self.sigmoid(x) * x
+        self.log_det_sigmoid = lambda x: 2*torch.log(self.sigmoid(x)) -x
         
         # Inverse sigmoid and its log det
         self.inv_sigmoid = lambda x: - torch.log((x)**-1 - 1)
-        self.log_det_inv_sigmoid = lambda x: - torch.log(x) - torch.log(1-x)
+        self.log_det_inv_sigmoid = lambda x: torch.log(1 / (x- x**2))
         
     def forward(self, x):
         # Dequantizing input (adding continuous noise in range [0, 1]) and putting in range [0, 1]
@@ -146,7 +176,7 @@ class AffineCoupling(nn.Module):
         
         # Computing output
         y1 = x1
-        y2 = torch.exp(scale) * x2 + shift
+        y2 = torch.exp(scale) * (x2 + shift)
         out = torch.cat((y1, y2), 1)
         
         # Computing log of the determinant of the Jacobian
@@ -164,11 +194,11 @@ class AffineCoupling(nn.Module):
         
         # Computing inverse transformation
         x1 = y1
-        x2 = (y2 - shift) / torch.exp(scale)
+        x2 = y2 / torch.exp(scale) - shift
         out = torch.cat((x1, x2), 1) if self.modify_x2 else torch.cat((x2, x1), 1)
         
         # Computing log of the determinant of the Jacobian (for backward tranformation)
-        log_det_j =  -torch.sum(scale, dim=[1, 2, 3])
+        log_det_j = -torch.sum(scale, dim=[1, 2, 3])
         
         return out, log_det_j
     
@@ -202,6 +232,7 @@ def training_loop(model, epochs, lr, wd, loader, device):
     model.train()
     best_loss = float("inf")
     optim = Adam(model.parameters(), lr=lr, weight_decay=wd)
+    scheduler = LinearLR(optimizer=optim)
     to_bpd = np.log2(np.exp(1)) / (28*28*1) # Constant that normalizes w.r.t. input shape
     
     for epoch in tqdm(range(epochs), desc="Training progress", colour="#00ff00"):
@@ -221,18 +252,20 @@ def training_loop(model, epochs, lr, wd, loader, device):
             # Optimization step
             optim.zero_grad()
             loss.backward()
-            # torch.nn.utils.clip_grad_norm_(model.parameters(), 1) # Clipping gradient norm
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1) # Clipping gradient norm
             optim.step()
             
             # Logging variable
             epoch_loss += loss.item() / len(loader)
+        
+        # Stepping with the LR scheduler
+        scheduler.step()
         
         # Logging epoch result and storing best model
         log_str = f"Epoch {epoch+1}/{epochs} loss: {epoch_loss:.3f}"
         if best_loss > epoch_loss:
             best_loss = epoch_loss
             log_str += " --> Storing model"
-            
             torch.save(model.state_dict(), "./nf_model.pt")
         print(log_str)
 
@@ -255,14 +288,14 @@ def main():
     # Creating the model
     model = Flow([
         Dequantization(256),
-        AffineCoupling(GatedConvNet(1), modify_x2=True), #AffineCoupling(SimpleCNN(7), modify_x2=True),
-        AffineCoupling(GatedConvNet(1), modify_x2=False), #AffineCoupling(SimpleCNN(7), modify_x2=False),
-        AffineCoupling(GatedConvNet(1), modify_x2=True), #AffineCoupling(SimpleCNN(5), modify_x2=True),
-        AffineCoupling(GatedConvNet(1), modify_x2=False), #AffineCoupling(SimpleCNN(5), modify_x2=False),
-        AffineCoupling(GatedConvNet(1), modify_x2=True), #AffineCoupling(SimpleCNN(3), modify_x2=True),
-        AffineCoupling(GatedConvNet(1), modify_x2=False), #AffineCoupling(SimpleCNN(3), modify_x2=False),
-        AffineCoupling(GatedConvNet(1), modify_x2=True), #AffineCoupling(SimpleCNN(3), modify_x2=True),
-        AffineCoupling(GatedConvNet(1), modify_x2=False), #AffineCoupling(SimpleCNN(3), modify_x2=False),
+        AffineCoupling(SimpleCNN(), modify_x2=True),
+        AffineCoupling(SimpleCNN(), modify_x2=False),
+        AffineCoupling(SimpleCNN(), modify_x2=True),
+        AffineCoupling(SimpleCNN(), modify_x2=False),
+        AffineCoupling(SimpleCNN(), modify_x2=True),
+        AffineCoupling(SimpleCNN(), modify_x2=False),
+        AffineCoupling(SimpleCNN(), modify_x2=True),
+        AffineCoupling(SimpleCNN(), modify_x2=False)
     ]).to(device)
     
     # Showing number of trainable paramsk
@@ -290,8 +323,8 @@ def main():
     with torch.no_grad():
         # Mapping the normally distributed noise to new images
         noise = torch.randn(64, 2, 28, 28).to(device)
-        images = model.backward(noise)[0]  
-        images = images[:, 0, :, :].reshape(64, 1, 28, 28)  # Removing duplicate channel
+        images = model.backward(noise)[0]
+        images = images.mean(dim=1).unsqueeze(1) # Removing duplicate channel by averaging
     
     save_image(images.float(), "Generated digits.png")
     Image.open("Generated digits.png").show()
