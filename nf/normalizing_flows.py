@@ -16,15 +16,15 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from torch.optim.lr_scheduler import LinearLR
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 
 from torchvision.datasets import MNIST
-from torchvision.utils import make_grid, save_image
+from torchvision.utils import save_image
 from torchvision.transforms import ToTensor, Compose, Lambda
 
 # Seeding
-SEED = 0
+SEED = 17
 np.random.seed(SEED)
 torch.random.manual_seed(SEED)
 torch.use_deterministic_algorithms(True)
@@ -75,7 +75,7 @@ class CNNBlock(nn.Module):
         self.elu = nn.ELU()
         
         self.conv1 = nn.Conv2d(2*n_channels, n_channels, kernel_size, 1, kernel_size//2)
-        self.conv2 = nn.Conv2d(2*n_channels, 2*n_channels, 1, 1, 0)
+        self.conv2 = nn.Conv2d(2*n_channels, 2*n_channels, 1, 1)
         
     def forward(self, x):
         out = torch.cat((self.elu(x), self.elu(-x)), dim=1)
@@ -108,26 +108,32 @@ class SimpleCNN(nn.Module):
         out = self.net(self.conv_in(x))
         out = torch.cat((self.elu(out), self.elu(-out)), dim=1)
         return self.conv_out(out)
-        
 
 class Dequantization(nn.Module):
     """Dequantizes the image. Dequantization is the first step for flows, as it allows to not load datapoints
     with high likelihoods and put volume on other input data as well."""
     def __init__(self, max_val):
         super(Dequantization, self).__init__()
-        self.max_val = max_val
         self.eps = 1e-5
+        self.max_val = max_val
+        self.sigmoid_fn = nn.Sigmoid()
         
-        # Sigmoid and its log det
-        self.sigmoid = torch.nn.Sigmoid()
-        self.log_det_sigmoid = lambda x: 2*torch.log(self.sigmoid(x)) -x
-        
-        # Inverse sigmoid and its log det
-        self.inv_sigmoid = lambda x: - torch.log((x)**-1 - 1)
-        self.log_det_inv_sigmoid = lambda x: torch.log(1 / (x- x**2))
-        
+    def sigmoid(self, x):
+        return self.sigmoid_fn(x)
+    
+    def log_det_sigmoid(self, x):
+        s = self.sigmoid(x)
+        return torch.log(s - s**2)
+    
+    def inv_sigmoid(self, x):
+        return - torch.log((x)**-1 - 1)
+    
+    def log_det_inv_sigmoid(self, x):
+        return torch.log(1 / (x- x**2))
+    
     def forward(self, x):
         # Dequantizing input (adding continuous noise in range [0, 1]) and putting in range [0, 1]
+        x = x.to(torch.float32)
         log_det = - np.log(self.max_val) * np.prod(x.shape[1:]) * torch.ones(len(x)).to(x.device)
         out = (x + torch.rand_like(x).detach()) / self.max_val
         
@@ -159,25 +165,35 @@ class Dequantization(nn.Module):
 
 class AffineCoupling(nn.Module):
     """Affine Coupling layer. Only modifies half of the input by running the other half through some non-linear function."""
-    def __init__(self, m : nn.Module, modify_x2 = True):
+    def __init__(self, m : nn.Module, modify_x2 = True, chw=(1, 28, 28)):
         super(AffineCoupling, self).__init__()
         self.m = m
         self.modify_x2 = modify_x2
-        self.s_fac = nn.Parameter(torch.ones(1))
+        
+        c, h, w = chw
+        self.scaling_fac = nn.Parameter(torch.ones(c))
+        self.mask = torch.tensor([[(j+k) % 2 == 0 for k in range(w)] for j in range(h)])
+        self.mask = self.mask.unsqueeze(0).unsqueeze(0)
+        
+        if self.modify_x2:
+            self.mask = ~ self.mask
         
     def forward(self, x):
         # Splitting input in two halves
-        splitted = x.chunk(2, 1) if self.modify_x2 else x.chunk(2, 1)[::-1]
-        x1, x2 = splitted
+        mask = self.mask.to(x.device)
+        x1 = mask * x
         
         # Computing scale and shift for x2
         scale, shift = self.m(x1).chunk(2, 1) # Non linear network
-        scale = torch.tanh(scale / self.s_fac) * self.s_fac  # Stabilizes training
+        s_fac = self.scaling_fac.exp().view(1, -1, 1, 1)
+        scale = torch.tanh(scale / s_fac) * s_fac  # Stabilizes training
+        
+        # Masking scale and shift
+        scale = ~mask * scale
+        shift = ~mask * shift
         
         # Computing output
-        y1 = x1
-        y2 = torch.exp(scale) * (x2 + shift)
-        out = torch.cat((y1, y2), 1)
+        out = (x + shift) * torch.exp(scale)
         
         # Computing log of the determinant of the Jacobian
         log_det_j = torch.sum(scale, dim=[1, 2, 3])
@@ -186,16 +202,21 @@ class AffineCoupling(nn.Module):
     
     def backward(self, y):
         # Splitting input
-        y1, y2 = y.chunk(2, 1)
+        mask = self.mask.to(y.device)
+            
+        x1 = mask * y
         
         # Computing scale and shift
-        scale, shift = self.m(y1).chunk(2, 1)
-        scale = torch.tanh(scale / self.s_fac) * self.s_fac
+        scale, shift = self.m(x1).chunk(2, 1)
+        s_fac = self.scaling_fac.exp().view(1, -1, 1, 1)
+        scale = torch.tanh(scale / s_fac) * s_fac
+        
+        # Masking scale and shift
+        scale = ~mask * scale
+        shift = ~mask * shift
         
         # Computing inverse transformation
-        x1 = y1
-        x2 = y2 / torch.exp(scale) - shift
-        out = torch.cat((x1, x2), 1) if self.modify_x2 else torch.cat((x2, x1), 1)
+        out = y / torch.exp(scale) - shift
         
         # Computing log of the determinant of the Jacobian (for backward tranformation)
         log_det_j = -torch.sum(scale, dim=[1, 2, 3])
@@ -226,14 +247,16 @@ class Flow(nn.Module):
             
         return out, log_det_j
     
-def training_loop(model, epochs, lr, wd, loader, device):
+def training_loop(model, epochs, lr, loader, device):
     """Trains the model"""
     
     model.train()
     best_loss = float("inf")
-    optim = Adam(model.parameters(), lr=lr, weight_decay=wd)
-    scheduler = LinearLR(optimizer=optim)
+    optim = Adam(model.parameters(), lr=lr)
+    scheduler = StepLR(optimizer=optim, step_size=1, gamma=0.99)
     to_bpd = np.log2(np.exp(1)) / (28*28*1) # Constant that normalizes w.r.t. input shape
+    
+    prior = torch.distributions.normal.Normal(loc=0.0, scale=1.0)
     
     for epoch in tqdm(range(epochs), desc="Training progress", colour="#00ff00"):
         epoch_loss = 0.0
@@ -243,7 +266,8 @@ def training_loop(model, epochs, lr, wd, loader, device):
             
             # Running images forward and getting log likelihood (log_px)
             z, log_det_j = model(x)
-            log_pz = -np.log(np.sqrt(2*np.pi)) -(z**2).sum(dim=[1,2,3]) # Because we are mapping to a normal N(0, 1)
+            # log_pz = -np.log(np.sqrt(2*np.pi)) -(z**2).sum(dim=[1,2,3]) # Because we are mapping to a normal N(0, 1)
+            log_pz = prior.log_prob(z).sum(dim=[1,2,3])
             log_px = log_pz + log_det_j
             
             # Getting the loss to be optimized (scaling with bits per dimension)
@@ -271,14 +295,13 @@ def training_loop(model, epochs, lr, wd, loader, device):
 
 def main():
     # Program arguments
-    N_EPOCHS = 100
-    LR = 1e-4
-    WD = 0.9
+    N_EPOCHS = 300
+    LR = 1e-3
     
     # Loading data (images are put in range [0, 255] and are copied on the channel dimension)
-    transform = Compose([ToTensor(), Lambda(lambda x: 255 * x.repeat_interleave(2, 0))])
+    transform = Compose([ToTensor(), Lambda(lambda x: (255 * x).to(torch.int32))])
     dataset = MNIST(root='./../datasets', train=True, download=True, transform=transform)
-    loader = DataLoader(dataset, batch_size=64, shuffle=True)
+    loader = DataLoader(dataset, batch_size=32, shuffle=True)
     
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -288,14 +311,7 @@ def main():
     # Creating the model
     model = Flow([
         Dequantization(256),
-        AffineCoupling(SimpleCNN(), modify_x2=True),
-        AffineCoupling(SimpleCNN(), modify_x2=False),
-        AffineCoupling(SimpleCNN(), modify_x2=True),
-        AffineCoupling(SimpleCNN(), modify_x2=False),
-        AffineCoupling(SimpleCNN(), modify_x2=True),
-        AffineCoupling(SimpleCNN(), modify_x2=False),
-        AffineCoupling(SimpleCNN(), modify_x2=True),
-        AffineCoupling(SimpleCNN(), modify_x2=False)
+        *[AffineCoupling(SimpleCNN(), modify_x2= i%2 == 0) for i in range(30)]
     ]).to(device)
     
     # Showing number of trainable paramsk
@@ -315,16 +331,15 @@ def main():
     
     # Training loop (ony if model doesn't exist)
     if not pretrained_exists:
-        training_loop(model, N_EPOCHS, LR, WD, loader, device)
+        training_loop(model, N_EPOCHS, LR, loader, device)
         model.load_state_dict(torch.load("./nf_model.pt"))
         
     # Testing the trained model
     model.eval()
     with torch.no_grad():
         # Mapping the normally distributed noise to new images
-        noise = torch.randn(64, 2, 28, 28).to(device)
+        noise = torch.randn(64, 1, 28, 28).to(device)
         images = model.backward(noise)[0]
-        images = images.mean(dim=1).unsqueeze(1) # Removing duplicate channel by averaging
     
     save_image(images.float(), "Generated digits.png")
     Image.open("Generated digits.png").show()
