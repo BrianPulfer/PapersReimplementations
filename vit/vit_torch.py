@@ -20,7 +20,7 @@ def patchify(images, n_patches):
 
     assert h == w, "Patchify method is implemented for square images only"
 
-    patches = torch.zeros(n, n_patches ** 2, h * w // n_patches ** 2)
+    patches = torch.zeros(n, n_patches ** 2, h * w * c // n_patches ** 2)
     patch_size = h // n_patches
 
     for idx, image in enumerate(images):
