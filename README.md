@@ -18,10 +18,11 @@ for a step-by-step explanation.
 ## Package nf
 
 Implementation of the "_Density estimation using Real NVP_" [paper](https://arxiv.org/abs/1605.08803).
-I re-implement and use 12 Affine Coupling layers to create a normalizing flow that can generate MNIST digits.
+I re-implement and use 30 Affine Coupling layers to create a normalizing flow that can generate MNIST digits.
 The generated digits come with associated log probabilities, which tell which images are the most likely according to
-the model.
-![](nf/Generated digits.png)
+the model. Here's a glance at the (not so impeccable) final result:
+
+<img src="./nf/Generated digits.png" />
 
 ## Package vit
 
