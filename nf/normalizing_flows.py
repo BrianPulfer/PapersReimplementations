@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
+from argparse import ArgumentParser
 
 import torch
 import torch.nn as nn
@@ -99,9 +100,7 @@ class SimpleCNN(nn.Module):
         self.net = nn.Sequential(*[
             nn.Sequential(
                 CNNBlock(channels_hidden, kernel_size),
-                LayerNormChannels(channels_hidden),
-                CNNBlock(channels_hidden, kernel_size),
-                LayerNormChannels(channels_hidden),
+                LayerNormChannels(channels_hidden)
             )
             for _ in range(blocks)
         ])
@@ -214,6 +213,7 @@ class AffineCoupling(nn.Module):
     def backward(self, y):
         # Splitting input
         mask = self.mask.to(y.device)
+
         x1 = mask * y
 
         # Computing scale and shift
@@ -226,10 +226,10 @@ class AffineCoupling(nn.Module):
         shift = ~mask * shift
 
         # Computing inverse transformation
-        out = y * torch.exp(-scale) - shift
+        out = y / torch.exp(scale) - shift
 
         # Computing log of the determinant of the Jacobian (for backward tranformation)
-        log_det_j = torch.sum(-scale, dim=[1, 2, 3])
+        log_det_j = -torch.sum(scale, dim=[1, 2, 3])
 
         return out, log_det_j
 
@@ -260,7 +260,7 @@ class Flow(nn.Module):
         return out, log_det_j
 
 
-def training_loop(model, prior, epochs, lr, loader, device):
+def training_loop(model, epochs, lr, loader, device, dir):
     """Trains the model"""
 
     model.train()
@@ -268,6 +268,8 @@ def training_loop(model, prior, epochs, lr, loader, device):
     optim = Adam(model.parameters(), lr=lr)
     scheduler = StepLR(optimizer=optim, step_size=1, gamma=0.99)
     to_bpd = np.log2(np.exp(1)) / (28 * 28 * 1)  # Constant that normalizes w.r.t. input shape
+
+    prior = torch.distributions.normal.Normal(loc=0.0, scale=1.0)
 
     for epoch in tqdm(range(epochs), desc="Training progress", colour="#00ff00"):
         epoch_loss = 0.0
@@ -301,22 +303,33 @@ def training_loop(model, prior, epochs, lr, loader, device):
         if best_loss > epoch_loss:
             best_loss = epoch_loss
             log_str += " --> Storing model"
-            torch.save(model.state_dict(), "./nf_model.pt")
+            torch.save(model.state_dict(), os.path.join(dir, "nf_model.pt"))
         print(log_str)
 
 
 def main():
     # Program arguments
-    N_EPOCHS = 300
-    LR = 1e-3
+    parser = ArgumentParser()
+    parser.add_argument("--epochs", type=int, default=500, help="Number of training epochs")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size")
+    parser.add_argument("--gpu", type=int, default=0, help="GPU number")
+    parser.add_argument("--store_dir", type=str, default=os.getcwd(), help="Store directory")
+    args = vars(parser.parse_args())
+
+    N_EPOCHS = args["epochs"]
+    LR = args["lr"]
+    BATCH_SIZE = args["batch_size"]
+    GPU = args["gpu"]
+    DIR = args["store_dir"]
 
     # Loading data (images are put in range [0, 255] and are copied on the channel dimension)
     transform = Compose([ToTensor(), Lambda(lambda x: (255 * x).to(torch.int32))])
     dataset = MNIST(root='./../datasets', train=True, download=True, transform=transform)
-    loader = DataLoader(dataset, batch_size=32, shuffle=True)
+    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
 
     # Device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(f"cuda:{GPU}" if torch.cuda.is_available() else "cpu")
     device_log = f"Using device: {device} " + (
         f"({torch.cuda.get_device_name(device)})" if torch.cuda.is_available() else "")
     print(device_log)
@@ -324,7 +337,7 @@ def main():
     # Creating the model
     model = Flow([
         Dequantization(256),
-        *[AffineCoupling(SimpleCNN(), modify_x2=i % 2 == 0) for i in range(12)]
+        *[AffineCoupling(SimpleCNN(), modify_x2=i % 2 == 0) for i in range(30)]
     ]).to(device)
 
     # Showing number of trainable paramsk
@@ -334,39 +347,30 @@ def main():
     print(f"The model has {trainable_params} trainable parameters.")
 
     # Loading pre-trained model (if any)
-    pretrained_exists = os.path.isfile("./nf_model.pt")
+    sd_path = os.path.join(DIR, "nf_model.pt")
+    pretrained_exists = os.path.isfile(sd_path)
     if pretrained_exists:
-        model.load_state_dict(torch.load("./nf_model.pt", map_location=device))
+        model.load_state_dict(torch.load(sd_path, map_location=device))
         print("Pre-trained model found and loaded")
 
     # Testing reversability with first image in the dataset
     test_reversability(model, dataset[0][0].unsqueeze(0).to(device))
 
     # Training loop (ony if model doesn't exist)
-    prior = torch.distributions.normal.Normal(loc=0.0, scale=1.0)
     if not pretrained_exists:
-        training_loop(model, prior, N_EPOCHS, LR, loader, device)
-        model.load_state_dict(torch.load("./nf_model.pt", map_location=device))
+        training_loop(model, N_EPOCHS, LR, loader, device, DIR)
+        sd_path = os.path.join(DIR, "nf_model.pt")
+        model.load_state_dict(torch.load(sd_path, map_location=device))
 
     # Testing the trained model
     model.eval()
     with torch.no_grad():
         # Mapping the normally distributed noise to new images
         noise = torch.randn(64, 1, 28, 28).to(device)
-        images, neg_log_det = model.backward(noise)
+        images = model.backward(noise)[0]
 
-        # Obtaining probabilities for the generated images
-        log_pz = prior.log_prob(noise).sum(dim=[1, 2, 3])
-        images_probabilities = log_pz - neg_log_det
-
-    # Showing generated images
     save_image(images.float(), "Generated digits.png")
     Image.open("Generated digits.png").show()
-
-    # Showing most likely image
-    idx = images_probabilities.argmin()
-    plt.imshow(images[idx].cpu()[0], cmap="gray")
-    plt.show()
 
     # Showing new latent mapping of first image in the dataset
     test_reversability(model, dataset[0][0].unsqueeze(0).to(device))
