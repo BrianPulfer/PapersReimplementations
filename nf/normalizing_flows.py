@@ -336,7 +336,7 @@ def main():
     # Loading pre-trained model (if any)
     pretrained_exists = os.path.isfile("./nf_model.pt")
     if pretrained_exists:
-        model.load_state_dict(torch.load("./nf_model.pt"))
+        model.load_state_dict(torch.load("./nf_model.pt", map_location=device))
         print("Pre-trained model found and loaded")
 
     # Testing reversability with first image in the dataset
@@ -346,7 +346,7 @@ def main():
     prior = torch.distributions.normal.Normal(loc=0.0, scale=1.0)
     if not pretrained_exists:
         training_loop(model, prior, N_EPOCHS, LR, loader, device)
-        model.load_state_dict(torch.load("./nf_model.pt"))
+        model.load_state_dict(torch.load("./nf_model.pt", map_location=device))
 
     # Testing the trained model
     model.eval()
