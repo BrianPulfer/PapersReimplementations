@@ -11,3 +11,5 @@ seaborn
 spacy
 tqdm
 einops
+gym
+wandb

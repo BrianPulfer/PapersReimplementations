@@ -8,3 +8,6 @@ __pycache__/
 *.pt
 
 /datasets
+
+wandb
+.pytest_cache
