@@ -37,7 +37,6 @@ dependencies:
   - docker-pycreds=0.4.0=py_0
   - einops=0.4.1=pyhd8ed1ab_0
   - expat=2.4.9=h6a678d5_0
-  - ffmpeg=4.2.2=h20bf706_0
   - fftw=3.3.9=h27cfd23_1
   - flit-core=3.6.0=pyhd3eb1b0_0
   - fontconfig=2.14.1=hef1e5e3_0
@@ -214,6 +213,7 @@ dependencies:
     - cython==0.29.32
     - decorator==4.4.2
     - fasteners==0.18
+    - ffmpeg==1.4
     - glfw==2.5.5
     - gym==0.26.2
     - gym-notices==0.0.8
