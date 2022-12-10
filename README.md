@@ -27,8 +27,11 @@ the model. Here's a glance at the (not so impeccable) final result:
 <img src="./nf/Generated digits.png" />
 
 ## ppo
-Implementation of the famous _"Proximal Policy Optimization Algorithms"_ [paper](https://arxiv.org/abs/1707.06347).
+Implementation of the famous _"Proximal Policy Optimization Algorithms"_ [paper](https://arxiv.org/abs/1707.06347). 
+I implement the simple PPO algorithm from scratch in pytorch using [weights & biases](https://wandb.ai) for logging the loss terms and the 
+average reward through iterations.
 
+<img src="./ppo/ppo_cartpole.gif" />
 
 ## vit
 
