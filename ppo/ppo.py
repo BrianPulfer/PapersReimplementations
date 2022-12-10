@@ -67,27 +67,18 @@ class MyPPO(nn.Module):
         self.n_actions = n_actions
 
         # Shared backbone for policy and value functions
-        w, h, c = in_shape
-        layers = [
-            nn.Sequential(
-                nn.BatchNorm2d(in_c),
-                nn.Conv2d(in_c, 2 * in_c, 5, 1, 2),
-                nn.ReLU(),
-                nn.Conv2d(2 * in_c, out_c, 5, 1, 2),
-                nn.ReLU(),
-                nn.MaxPool2d(2, 2)
-            ) for in_c, out_c in
-            [(c, 4 * c), (4 * c, 8 * c), (8 * c, 16 * c), (16 * c, 32 * c), (32 * c, 64 * c), (64 * c, 64 * c)]
-        ]
-        layers.append(nn.Flatten())
-        self.to_features = nn.Sequential(*layers)
-
-        with torch.no_grad():
-            out_size = self.to_features(torch.randn(1, c, h, w)).shape[-1]
+        in_dim = np.prod(in_shape)
+        self.to_features = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(in_dim, in_dim),
+            nn.Tanh(),
+            nn.Linear(in_dim, in_dim),
+            nn.Tanh()
+        )
 
         # State action function
         self.action_fn = nn.Sequential(
-            nn.Linear(out_size, 100),
+            nn.Linear(in_dim, 100),
             nn.ReLU(),
             nn.Linear(100, n_actions),
             nn.Softmax(dim=-1)
@@ -95,7 +86,7 @@ class MyPPO(nn.Module):
 
         # Value function
         self.value_fn = nn.Sequential(
-            nn.Linear(out_size, 100),
+            nn.Linear(in_dim, 100),
             nn.ReLU(),
             nn.Linear(100, 1)
         )
@@ -117,9 +108,9 @@ def run_timestamps(env, model, timestamps=2048, render=False, device="cpu"):
     # Running timestamps and collecting state, actions, rewards and terminations
     for ts in range(timestamps):
         # Taking a step into the environment
-        model_input = torch.from_numpy(state).permute(2, 1, 0).unsqueeze(0).to(device).float()
+        model_input = torch.from_numpy(state).unsqueeze(0).to(device).float()
         action, action_logits, value = model(model_input)
-        new_state, reward, terminated, truncated, info = env.step(action)
+        new_state, reward, terminated, truncated, info = env.step(action.item())
 
         # Rendering / storing (s, a, r, t) in the buffer
         if render:
@@ -146,7 +137,7 @@ def compute_cumulative_rewards(buffer, gamma):
     for i in range(len(buffer) - 1, -1, -1):
         r, t = buffer[i][-2], buffer[i][-1]
 
-        if not t:
+        if t:
             curr_rew = 0
         else:
             curr_rew = r + gamma * curr_rew
@@ -161,39 +152,41 @@ def get_losses(model, batch, epsilon, annealing, device="cpu"):
     states = torch.cat([batch[i][0] for i in range(n)])
     logits = torch.cat([batch[i][1] for i in range(n)])
     cumulative_rewards = torch.tensor([batch[i][2] for i in range(n)]).view(-1, 1).float().to(device)
-    cumulative_rewards = (cumulative_rewards - torch.mean(cumulative_rewards)) / (torch.std(cumulative_rewards) + 1e-7)
+    # cumulative_rewards = (cumulative_rewards - torch.mean(cumulative_rewards)) / (torch.std(cumulative_rewards) + 1e-7)
 
     # Computing predictions with the new model
     new_actions, new_logits, new_values = model(states)
     new_actions = new_actions.view(n, -1)
 
-    # Loss on the actor (L_CLIP)
-    advantage = cumulative_rewards - new_values.detach()  # Stopping gradient on the critic function
+    # Loss on the state-action-function / actor (L_CLIP)
+    advantages = cumulative_rewards - new_values.detach()  # Stopping gradient on the critic function
     margin = epsilon * annealing
     ratios = new_logits.gather(1, new_actions) / logits.gather(1, new_actions)
 
     l_clip = torch.mean(
         torch.min(
             torch.cat(
-                (ratios * advantage,
-                 torch.clip(ratios, 1 - margin, 1 + margin) * advantage),
+                (ratios * advantages,
+                 torch.clip(ratios, 1 - margin, 1 + margin) * advantages),
                 dim=1),
             dim=1
         ).values
     )
 
-    # Loss on the critic (L_VT)
-    l_vt = torch.mean((cumulative_rewards - new_values) ** 2)
+    # Loss on the value-function / critic (L_VF)
+    l_vf = torch.mean((cumulative_rewards - new_values) ** 2)
 
     # Bonus for entropy of the actor
     entropy_bonus = torch.mean(torch.sum(-new_logits * (torch.log(new_logits + 1e-5)), dim=1))
 
-    return l_clip, l_vt, entropy_bonus
+    return l_clip, l_vf, entropy_bonus
 
 
 def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon, n_epochs, batch_size, lr,
                   c1, c2, device, env_name=""):
     """Train the model on the given environment using multiple actors acting up to n timestamps."""
+
+    """
     # Starting a new Weights & Biases run
     wandb.init(project="Papers Re-implementations",
                entity="peutlefaire",
@@ -210,6 +203,7 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
                    "c1": c1,
                    "c2": c2
                })
+    """
 
     # Training variables
     max_reward = float("-inf")
@@ -267,6 +261,7 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
             log += " --> Stored model with highest average reward"
         print(log)
 
+        """
         # Logging information to W&B
         wandb.log({
             "loss (total)": curr_loss,
@@ -276,12 +271,9 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
             "average reward": avg_rew
         })
 
-        # Watching model's gradients
-        wandb.watch(model)
-
     # Finishing W&B session
     wandb.finish()
-
+    """
 
 def testing_loop(env, model, n_episodes, device):
     """Runs the learned policy on the environment for n episodes"""
@@ -301,7 +293,8 @@ def main():
     device = get_device()
 
     # Creating environment
-    env_name = "ALE/Breakout-v5"
+    # env_name = "ALE/Breakout-v5"
+    env_name = "CartPole-v1"
     env = gym.make(env_name)
 
     # Creating the model (both actor and critic)
