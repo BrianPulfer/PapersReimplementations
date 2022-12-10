@@ -28,7 +28,7 @@ def parse_args():
     parser = ArgumentParser()
 
     # Program arguments (default for Atari games)
-    parser.add_argument("--max_iterations", type=int, help="Number of iterations of training", default=300)
+    parser.add_argument("--max_iterations", type=int, help="Number of iterations of training", default=100)
     parser.add_argument("--n_actors", type=int, help="Number of actors for each update", default=8)
     parser.add_argument("--horizon", type=int, help="Number of timestamps for each actor", default=128)
     parser.add_argument("--epsilon", type=float, help="Epsilon parameter", default=0.1)
@@ -108,7 +108,7 @@ class MyPPO(nn.Module):
 
 
 @torch.no_grad()
-def run_timestamps(env, model, timestamps=2048, render=False, device="cpu"):
+def run_timestamps(env, model, timestamps=128, render=False, device="cpu"):
     """Runs the given policy on the given environment for the given amount of timestamps.
      Returns a buffer with state action transitions and rewards."""
     buffer = []
@@ -292,7 +292,7 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
 def testing_loop(env, model, n_episodes, device):
     """Runs the learned policy on the environment for n episodes"""
     for _ in range(n_episodes):
-        run_timestamps(env, model, timestamps=1_000, render=True, device=device)
+        run_timestamps(env, model, timestamps=128, render=True, device=device)
 
 
 def main():
