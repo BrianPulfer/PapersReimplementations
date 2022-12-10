@@ -151,7 +151,7 @@ def get_losses(model, batch, epsilon, annealing, device="cpu"):
     n = len(batch)
     states = torch.cat([batch[i][0] for i in range(n)])
     logits = torch.cat([batch[i][1] for i in range(n)])
-    cumulative_rewards = torch.tensor([batch[i][2] for i in range(n)]).view(-1, 1).float().to(device)
+    cumulative_rewards = torch.tensor([batch[i][-2] for i in range(n)]).view(-1, 1).float().to(device)
     # cumulative_rewards = (cumulative_rewards - torch.mean(cumulative_rewards)) / (torch.std(cumulative_rewards) + 1e-7)
 
     # Computing predictions with the new model
@@ -220,12 +220,12 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
         for actor in range(1, n_actors + 1):
             buffer.extend(run_timestamps(env, model, horizon, False, device))
 
-        # Getting the average reward (for logging and checkpointing)
-        avg_rew = np.mean([buffer[i][-2] for i in range(len(buffer))])
-
         # Computing cumulative rewards and shuffling the buffer
         compute_cumulative_rewards(buffer, gamma)
         np.random.shuffle(buffer)
+
+        # Getting the average reward (for logging and checkpointing)
+        avg_rew = np.mean([buffer[i][-2] for i in range(len(buffer))])
 
         # Running optimization for a few epochs
         for epoch in range(n_epochs):
