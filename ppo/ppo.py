@@ -28,15 +28,15 @@ def parse_args():
     parser = ArgumentParser()
 
     # Program arguments (default for Atari games)
-    parser.add_argument("--max_iterations", type=int, help="Number of iterations of training", default=10_000)
+    parser.add_argument("--max_iterations", type=int, help="Number of iterations of training", default=300)
     parser.add_argument("--n_actors", type=int, help="Number of actors for each update", default=8)
     parser.add_argument("--horizon", type=int, help="Number of timestamps for each actor", default=128)
     parser.add_argument("--epsilon", type=float, help="Epsilon parameter", default=0.1)
     parser.add_argument("--n_epochs", type=int, help="Number of training epochs per iteration", default=3)
-    parser.add_argument("--batch_size", type=int, help="Batch size", default=32*8)
+    parser.add_argument("--batch_size", type=int, help="Batch size", default=32 * 8)
     parser.add_argument("--lr", type=float, help="Learning rate", default=2.5 * 1e-4)
     parser.add_argument("--gamma", type=float, help="Discount factor gamma", default=0.99)
-    parser.add_argument("--c1", type=float, help="Weight for the value function in the loss function", default=0.5)  # TODO: set to 1
+    parser.add_argument("--c1", type=float, help="Weight for the value function in the loss function", default=1)
     parser.add_argument("--c2", type=float, help="Weight for the entropy bonus in the loss function", default=0.01)
     parser.add_argument("--n_test_episodes", type=int, help="Number of episodes to render", default=5)
     parser.add_argument("--seed", type=int, help="Randomizing seed for the experiment", default=0)
@@ -58,43 +58,52 @@ def get_device():
 
 class MyPPO(nn.Module):
     """Implementation of a PPO model. The same backbone is used to get actor and critic values."""
-    def __init__(self, in_shape, n_actions):
+
+    def __init__(self, in_shape, n_actions, hidden_d=100, share_backbone=False):
         # Super constructor
         super(MyPPO, self).__init__()
 
         # Attributes
         self.in_shape = in_shape
         self.n_actions = n_actions
+        self.hidden_d = hidden_d
+        self.share_backbone = share_backbone
 
         # Shared backbone for policy and value functions
         in_dim = np.prod(in_shape)
-        self.to_features = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(in_dim, in_dim),
-            nn.Tanh(),
-            nn.Linear(in_dim, in_dim),
-            nn.Tanh()
-        )
+
+        def to_features():
+            return nn.Sequential(
+                nn.Flatten(),
+                nn.Linear(in_dim, hidden_d),
+                nn.ReLU(),
+                nn.Linear(hidden_d, hidden_d),
+                nn.ReLU()
+            )
+
+        self.backbone = to_features() if self.share_backbone else nn.Identity()
 
         # State action function
-        self.action_fn = nn.Sequential(
-            nn.Linear(in_dim, 100),
+        self.actor = nn.Sequential(
+            nn.Identity() if self.share_backbone else to_features(),
+            nn.Linear(hidden_d, hidden_d),
             nn.ReLU(),
-            nn.Linear(100, n_actions),
+            nn.Linear(hidden_d, n_actions),
             nn.Softmax(dim=-1)
         )
 
         # Value function
-        self.value_fn = nn.Sequential(
-            nn.Linear(in_dim, 100),
+        self.critic = nn.Sequential(
+            nn.Identity() if self.share_backbone else to_features(),
+            nn.Linear(hidden_d, hidden_d),
             nn.ReLU(),
-            nn.Linear(100, 1)
+            nn.Linear(hidden_d, 1)
         )
 
     def forward(self, x):
-        features = self.to_features(x)
-        action = self.action_fn(features)
-        value = self.value_fn(features)
+        features = self.backbone(x)
+        action = self.actor(features)
+        value = self.critic(features)
         return Categorical(action).sample(), action, value
 
 
@@ -116,7 +125,7 @@ def run_timestamps(env, model, timestamps=2048, render=False, device="cpu"):
         if render:
             env.render()
         else:
-            buffer.append([model_input, action_logits, reward, terminated or truncated])
+            buffer.append([model_input, action, action_logits, value, reward, terminated or truncated])
 
         # Updating current state
         state = new_state
@@ -144,24 +153,35 @@ def compute_cumulative_rewards(buffer, gamma):
 
         buffer[i][-2] = curr_rew
 
+    # Getting the average reward before normalizing (for logging and checkpointing)
+    avg_rew = np.mean([buffer[i][-2] for i in range(len(buffer))])
+
+    # Normalizing cumulative rewards
+    mean = np.mean([buffer[i][-2] for i in range(len(buffer))])
+    std = np.std([buffer[i][-2] for i in range(len(buffer))]) + 1e-6
+    for i in range(len(buffer)):
+        buffer[i][-2] = (buffer[i][-2] - mean) / std
+
+    return avg_rew
+
 
 def get_losses(model, batch, epsilon, annealing, device="cpu"):
     """Returns the three loss terms for a given model and a given batch and additional parameters"""
     # Getting old data
     n = len(batch)
     states = torch.cat([batch[i][0] for i in range(n)])
-    logits = torch.cat([batch[i][1] for i in range(n)])
+    actions = torch.cat([batch[i][1] for i in range(n)]).view(n, 1)
+    logits = torch.cat([batch[i][2] for i in range(n)])
+    values = torch.cat([batch[i][3] for i in range(n)])
     cumulative_rewards = torch.tensor([batch[i][-2] for i in range(n)]).view(-1, 1).float().to(device)
-    # cumulative_rewards = (cumulative_rewards - torch.mean(cumulative_rewards)) / (torch.std(cumulative_rewards) + 1e-7)
 
     # Computing predictions with the new model
-    new_actions, new_logits, new_values = model(states)
-    new_actions = new_actions.view(n, -1)
+    _, new_logits, new_values = model(states)
 
     # Loss on the state-action-function / actor (L_CLIP)
-    advantages = cumulative_rewards - new_values.detach()  # Stopping gradient on the critic function
+    advantages = cumulative_rewards - values
     margin = epsilon * annealing
-    ratios = new_logits.gather(1, new_actions) / logits.gather(1, new_actions)
+    ratios = new_logits.gather(1, actions) / logits.gather(1, actions)
 
     l_clip = torch.mean(
         torch.min(
@@ -186,7 +206,6 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
                   c1, c2, device, env_name=""):
     """Train the model on the given environment using multiple actors acting up to n timestamps."""
 
-    """
     # Starting a new Weights & Biases run
     wandb.init(project="Papers Re-implementations",
                entity="peutlefaire",
@@ -203,7 +222,6 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
                    "c1": c1,
                    "c2": c2
                })
-    """
 
     # Training variables
     max_reward = float("-inf")
@@ -221,11 +239,8 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
             buffer.extend(run_timestamps(env, model, horizon, False, device))
 
         # Computing cumulative rewards and shuffling the buffer
-        compute_cumulative_rewards(buffer, gamma)
+        avg_rew = compute_cumulative_rewards(buffer, gamma)
         np.random.shuffle(buffer)
-
-        # Getting the average reward (for logging and checkpointing)
-        avg_rew = np.mean([buffer[i][-2] for i in range(len(buffer))])
 
         # Running optimization for a few epochs
         for epoch in range(n_epochs):
@@ -261,7 +276,6 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
             log += " --> Stored model with highest average reward"
         print(log)
 
-        """
         # Logging information to W&B
         wandb.log({
             "loss (total)": curr_loss,
@@ -273,7 +287,7 @@ def training_loop(env, model, max_iterations, n_actors, horizon, gamma, epsilon,
 
     # Finishing W&B session
     wandb.finish()
-    """
+
 
 def testing_loop(env, model, n_episodes, device):
     """Runs the learned policy on the environment for n episodes"""
@@ -292,8 +306,7 @@ def main():
     # Getting device
     device = get_device()
 
-    # Creating environment
-    # env_name = "ALE/Breakout-v5"
+    # Creating environment (discrete action space)
     env_name = "CartPole-v1"
     env = gym.make(env_name)
 
