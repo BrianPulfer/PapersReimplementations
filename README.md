@@ -17,6 +17,16 @@ using [Git Large File System](https://git-lfs.github.com/).
 Check out the [Blog](https://medium.com/mlearning-ai/enerating-images-with-ddpms-a-pytorch-implementation-cef5a2ba8cb1)
 for a step-by-step explanation.
 
+## gnns
+
+Implementation of various Graph Neural Networks (GNNs) taking inspiration from Petar Veličković "__" [survey](https://arxiv.org/pdf/2301.08210v1.pdf). Graph neural networks implemented differ in the way messages are passed (from least to most expressive):
+
+ - Convolutional GNN
+ - Attentional GNN
+ - Message-Passing GNN
+
+I use these GNNs for the task of image classification (Graph property prediction) on the CIFAR-10 dataset.
+
 ## gpt
 
 Decoder-only implementation of a GPT model from "_Attention is all you need_" [paper](https://arxiv.org/abs/1706.03762).
