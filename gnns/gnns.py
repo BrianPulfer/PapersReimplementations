@@ -1,5 +1,5 @@
 """Implementation of convolutional, attentional and message-passing GNNs, inspired by the paper
-    Everything is Connected 
+    Everything is Connected: Graph Neural Networks
 (https://arxiv.org/pdf/2301.08210v1.pdf)
  
 Useful links:
