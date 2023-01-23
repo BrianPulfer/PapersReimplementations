@@ -18,14 +18,14 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 
 from torchvision.datasets import CIFAR10
-from torchvision.transforms import Compose, ToTensor, Normalize, Lambda
+from torchvision.transforms import Compose, ToTensor, Normalize, Resize, Lambda
 
 
 # Definitions
 NETWORK_TYPES = ["attn", "conv", "mp"]
 AGGREGATION_FUNCTIONS = {
-    "sum": lambda X: torch.sum(X, dim=1),
-    "avg": lambda X: torch.mean(X, dim=1)
+    "sum": lambda X, dim=1: torch.sum(X, dim=dim),
+    "avg": lambda X, dim=1: torch.mean(X, dim=dim)
 }
 
 
@@ -49,7 +49,7 @@ def parse_args():
     parser.add_argument(f"--batch_size", type=int,
                         help="Batch size used for training. Default is 32.", default=32)
     parser.add_argument(f"--checkpoint", type=str,
-                        help="Path to model checkpoints", default=None)
+                        help="Path to model checkpoints", default="gnn.pt")
 
     return vars(parser.parse_args())
 
@@ -118,7 +118,7 @@ class Attention(nn.Module):
         q, k = self.to_qk(x).chunk(2, -1)
         attn_cues = ((q @ k.transpose(-2, -1)) / (self.dim**0.5 + 1e-5))
         
-        if mask:
+        if mask is not None:
             attn_cues.masked_fill(mask == 0, float("-inf"))
         
         attn_cues = attn_cues.softmax(-1)
@@ -146,10 +146,10 @@ class GraphAttentionLayer(nn.Module):
 
     def forward(self, H, A):
         features = self.psi(H)  # (B, N, D)
-        attn = self.sa(H, A)
+        attn = self.sa(H, A)  # (B, N, N)
         
         messages = torch.einsum("bnd, bnm -> bnmd", features, attn)  # (B, N, N, D)
-        messages = self.aggr(messages) # (B, N, D)
+        messages = self.aggr(messages, dim=2) # (B, N, D)
         
         phi_input = torch.cat((messages, H), dim=-1)
         return self.phi(phi_input)
@@ -202,6 +202,7 @@ class GraphNeuralNetwork(nn.Module):
         # X has shape (N, D) and represents the edges.
         # A is binary with shape (N, N) and represents the adjacency matrix.
         H = self.encoding(X)
+        A = A.to(H.device)
         for l in self.layers:
             H = l(H, A)
         return self.out_mlp(self.out_aggr(H))
@@ -214,8 +215,10 @@ def main():
 
     # Loading data
     # We reshape the image such that each pixel is an edge with C features.
+    img_size = 16
     transform = Compose([
         ToTensor(),
+        Resize((img_size, img_size)),
         Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         # (C, H, W) -> (H*W, C).
         Lambda(lambda x: x.flatten(1).transpose(1, 0))
@@ -231,22 +234,20 @@ def main():
         test_set, batch_size=args["batch_size"], shuffle=False)
 
     # Building the Neighbourhood matrix (1024 x 1024) for all "graphs" (images of size 32x32)
-    A = torch.zeros((32*32, 32*32))
-    nums = torch.arange(32*32).reshape((32, 32))
-    for i in range(32):
-        for j in range(32):
+    A = torch.zeros((img_size**2, img_size**2))
+    nums = torch.arange(img_size**2).reshape((img_size, img_size))
+    for i in range(img_size):
+        for j in range(img_size):
             start_x, start_y = i-1 if i > 0 else 0, j-1 if j > 0 else 0
             neighbours = nums[start_x: i+2, start_y: j+2].flatten()
 
             for n in neighbours:
-                A[i*32 + j, n] = A[n, i*32 + j] = 1
+                A[i*img_size + j, n] = A[n, i*img_size + j] = 1
 
     # Creating model
     # Number of edges, edge dimensionality, hidden dimensionality and number of output classes
-    n, d, h, o = 32*32, 3, 32, 10
-    model = GraphNeuralNetwork(
-        args["type"], args["n_layers"], n, d, h, o, aggr=args["aggregation"])
-    print(model(torch.randn(7, 1024, 3), torch.randn(1024, 1024)).shape)
+    n, d, h, o = img_size**2, 3, 16, 10
+    model = GraphNeuralNetwork(args["type"], args["n_layers"], n, d, h, o, aggr=args["aggregation"])
 
     # Training loop
     n_epochs = args["epochs"]
@@ -261,7 +262,7 @@ def main():
     min_loss = float("inf")
     progress_bar = tqdm(range(1, n_epochs+1))
 
-    wandb.init(project="Papers Re-implementations",
+    """wandb.init(project="Papers Re-implementations",
                entity="peutlefaire",
                name=f"GNN ({args['type']})",
                config={
@@ -271,23 +272,23 @@ def main():
                    "epochs": n_epochs,
                    "batch_size": args["batch_size"],
                    "lr": args["lr"]
-               }
-               )
+               })"""
+    
     for epoch in progress_bar:
         epoch_loss = 0.0
-        for batch in train_loader:
+        for batch in tqdm(train_loader, leave=False):
             x, y = batch
             x, y = x.to(device), y.to(device)
 
-            loss = criterion(model(x, A), y)
+            loss = criterion(model(x, A), y) / len(train_loader)
             epoch_loss += loss.item()
             optim.zero_grad()
             loss.backward()
             optim.step()
 
-            wandb.log({
+            """wandb.log({
                 "batch loss": loss.item()
-            })
+            })"""
 
         description = f"Epoch {epoch}/{n_epochs} - Training loss: {epoch_loss:.3f}"
         if epoch_loss < min_loss:
@@ -296,7 +297,7 @@ def main():
             description += "  -> ✅ Stored best model."
 
         progress_bar.set_description(description)
-    wandb.finish()
+    """wandb.finish()"""
 
     # Testing loop
     with torch.no_grad():
@@ -309,7 +310,7 @@ def main():
 
             correct += (model(x, A).argmax(1) == y).sum().item()
             total += len(y)
-    print(f"\n\nFinal test accuracy: {(correct / total):.2f}%")
+    print(f"\n\nFinal test accuracy: {(correct / total * 100):.2f}%")
     print("Program completed successfully!")
 
 

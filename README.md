@@ -18,6 +18,7 @@ Check out the [Blog](https://medium.com/mlearning-ai/enerating-images-with-ddpms
 for a step-by-step explanation.
 
 ## gnns
+(🚧 This is still work in progress)
 
 Implementation of various Graph Neural Networks (GNNs) taking inspiration from Petar Veličković "_Everything is Connected: Graph Neural Networks_" [survey](https://arxiv.org/pdf/2301.08210v1.pdf). Graph neural networks implemented differ in the way messages are passed (from least to most expressive):
 
