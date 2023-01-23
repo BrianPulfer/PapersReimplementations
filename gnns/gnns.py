@@ -114,9 +114,14 @@ class Attention(nn.Module):
         self.dim = dim
         self.to_qk = nn.Linear(dim, 2*dim)
         
-    def forward(self, x):
+    def forward(self, x, mask=None):
         q, k = self.to_qk(x).chunk(2, -1)
-        attn_cues = ((q @ k.transpose(-2, -1)) / (self.dim**0.5 + 1e-5)).softmax(-1)
+        attn_cues = ((q @ k.transpose(-2, -1)) / (self.dim**0.5 + 1e-5))
+        
+        if mask:
+            attn_cues.masked_fill(mask == 0, float("-inf"))
+        
+        attn_cues = attn_cues.softmax(-1)
         return attn_cues
         
 
@@ -141,7 +146,7 @@ class GraphAttentionLayer(nn.Module):
 
     def forward(self, H, A):
         features = self.psi(H)  # (B, N, D)
-        attn = self.sa(H) * A # (B, N, N)
+        attn = self.sa(H, A)
         
         messages = torch.einsum("bnd, bnm -> bnmd", features, attn)  # (B, N, N, D)
         messages = self.aggr(messages) # (B, N, D)
