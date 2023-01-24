@@ -60,8 +60,11 @@ def get_device():
         device = torch.device("cuda")
         print("\nFound GPU: ", torch.cuda.get_device_name(device))
         return device
+    elif torch.backends.mps.is_available():
+        device = torch.device("mps")
+        print("\nFound Apple MPS chip.")
 
-    warnings.warn("WARNING: No GPU found - Training on CPU.")
+    warnings.warn("WARNING: No GPU nor MPS found - Training on CPU.")
     return torch.device("cpu")
 
 
