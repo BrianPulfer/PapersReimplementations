@@ -64,7 +64,7 @@ def get_device():
         device = torch.device("mps")
         print("\nFound Apple MPS chip.")
 
-    warnings.warn("WARNING: No GPU nor MPS found - Training on CPU.")
+    warnings.warn("\nWARNING: No GPU nor MPS found - Training on CPU.")
     return torch.device("cpu")
 
 
@@ -113,13 +113,10 @@ class GraphConvLayer(nn.Module):
 class Attention(nn.Module):
     def __init__(self, dim):
         super(Attention, self).__init__()
-        
         self.dim = dim
-        self.to_qk = nn.Linear(dim, 2*dim)
         
     def forward(self, x, mask=None):
-        q, k = self.to_qk(x).chunk(2, -1)
-        attn_cues = ((q @ k.transpose(-2, -1)) / (self.dim**0.5 + 1e-5))
+        attn_cues = ((x @ x.transpose(-2, -1)) / (self.dim**0.5 + 1e-5))
         
         if mask is not None:
             attn_cues.masked_fill(mask == 0, float("-inf"))
