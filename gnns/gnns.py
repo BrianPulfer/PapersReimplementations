@@ -145,11 +145,11 @@ class GraphAttentionLayer(nn.Module):
         )
 
     def forward(self, H, A):
-        features = self.psi(H)  # (B, N, D)
+        messages = self.psi(H)  # (B, N, D)
         attn = self.sa(H, A)  # (B, N, N)
         
-        messages = torch.einsum("bnd, bnm -> bnmd", features, attn)  # (B, N, N, D)
-        messages = self.aggr(messages, dim=2) # (B, N, D)
+        messages = torch.einsum("bnm, bmd -> bndm", attn, messages)  # (B, N, D, N)
+        messages = self.aggr(messages, dim=-1) # (B, N, D)
         
         phi_input = torch.cat((messages, H), dim=-1)
         return self.phi(phi_input)
@@ -199,10 +199,9 @@ class GraphNeuralNetwork(nn.Module):
         )
 
     def forward(self, X, A):
-        # X has shape (N, D) and represents the edges.
+        # X has shape (B, N, D) and represents the edges.
         # A is binary with shape (N, N) and represents the adjacency matrix.
         H = self.encoding(X)
-        A = A.to(H.device)
         for l in self.layers:
             H = l(H, A)
         return self.out_mlp(self.out_aggr(H))
@@ -212,6 +211,9 @@ def main():
     # Parsing arguments
     args = parse_args()
     print("Launched program with the following arguments:", args)
+    
+    # Getting device
+    device = get_device()
 
     # Loading data
     # We reshape the image such that each pixel is an edge with C features.
@@ -234,7 +236,7 @@ def main():
         test_set, batch_size=args["batch_size"], shuffle=False)
 
     # Building the Neighbourhood matrix (1024 x 1024) for all "graphs" (images of size 32x32)
-    A = torch.zeros((img_size**2, img_size**2))
+    A = torch.zeros((img_size**2, img_size**2)).to(device)
     nums = torch.arange(img_size**2).reshape((img_size, img_size))
     for i in range(img_size):
         for j in range(img_size):
@@ -254,8 +256,6 @@ def main():
     checkpoint = args["checkpoint"] if args["checkpoint"] else f"({args['type']}_gnn).pt"
     optim = Adam(model.parameters(), args["lr"])
     criterion = nn.CrossEntropyLoss()
-
-    device = get_device()
     model = model.to(device)
     model.train()
 
