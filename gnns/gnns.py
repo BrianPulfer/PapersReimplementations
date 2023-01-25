@@ -33,6 +33,10 @@ def parse_args():
     """Parses the program arguments"""
     parser = ArgumentParser()
 
+    # Data arguments
+    parser.add_argument(f"--image_size", type=int,
+                        help="Size to which reshape CIFAR images", default=16)
+
     # Model arguments
     parser.add_argument(f"--type", type=str, help="Type of the network used.",
                         choices=NETWORK_TYPES, default="attn")
@@ -110,20 +114,21 @@ class GraphConvLayer(nn.Module):
         phi_input = torch.cat((messages, H), dim=-1)  #  (B, N, 2*D)
         return self.phi(phi_input)  # (B, N, D)
 
+
 class Attention(nn.Module):
     def __init__(self, dim):
         super(Attention, self).__init__()
         self.dim = dim
-        
+
     def forward(self, x, mask=None):
         attn_cues = ((x @ x.transpose(-2, -1)) / (self.dim**0.5 + 1e-5))
-        
+
         if mask is not None:
             attn_cues.masked_fill(mask == 0, float("-inf"))
-        
+
         attn_cues = attn_cues.softmax(-1)
         return attn_cues
-        
+
 
 class GraphAttentionLayer(nn.Module):
     """
@@ -133,9 +138,10 @@ class GraphAttentionLayer(nn.Module):
 
     def __init__(self, n, d, aggr):
         super(GraphAttentionLayer, self).__init__()
-        
+
         self.aggr = AGGREGATION_FUNCTIONS[aggr]
-        
+        self.ln1 = nn.LayerNorm(d)
+        self.ln2 = nn.LayerNorm(2*d)
         self.psi = PsiNetwork(d, d)
         self.sa = Attention(d)
         self.phi = nn.Sequential(
@@ -145,14 +151,15 @@ class GraphAttentionLayer(nn.Module):
         )
 
     def forward(self, H, A):
-        messages = self.psi(H)  # (B, N, D)
+        messages = self.psi(self.ln1(H))  #  (B, N, D)
         attn = self.sa(H, A)  # (B, N, N)
-        
-        messages = torch.einsum("bnm, bmd -> bndm", attn, messages)  # (B, N, D, N)
-        messages = self.aggr(messages, dim=-1) # (B, N, D)
-        
+
+        messages = torch.einsum("bnm, bmd -> bndm", attn,
+                                messages)  #  (B, N, D, N)
+        messages = self.aggr(messages, dim=-1)  # (B, N, D)
+
         phi_input = torch.cat((messages, H), dim=-1)
-        return self.phi(phi_input)
+        return self.phi(self.ln2(phi_input)) + H
 
 
 class GraphMPLayer(nn.Module):
@@ -164,7 +171,7 @@ class GraphMPLayer(nn.Module):
     def __init__(self, n, d, aggr):
         super(GraphMPLayer, self).__init__()
         # TODO
- 
+
     def forward(self, H, A):
         # TODO
         pass
@@ -211,13 +218,13 @@ def main():
     # Parsing arguments
     args = parse_args()
     print("Launched program with the following arguments:", args)
-    
+
     # Getting device
     device = get_device()
 
     # Loading data
     # We reshape the image such that each pixel is an edge with C features.
-    img_size = 16
+    img_size = args["image_size"]
     transform = Compose([
         ToTensor(),
         Resize((img_size, img_size)),
@@ -249,7 +256,8 @@ def main():
     # Creating model
     # Number of edges, edge dimensionality, hidden dimensionality and number of output classes
     n, d, h, o = img_size**2, 3, 16, 10
-    model = GraphNeuralNetwork(args["type"], args["n_layers"], n, d, h, o, aggr=args["aggregation"])
+    model = GraphNeuralNetwork(
+        args["type"], args["n_layers"], n, d, h, o, aggr=args["aggregation"])
 
     # Training loop
     n_epochs = args["epochs"]
@@ -273,7 +281,7 @@ def main():
                    "batch_size": args["batch_size"],
                    "lr": args["lr"]
                })"""
-    
+
     for epoch in progress_bar:
         epoch_loss = 0.0
         for batch in tqdm(train_loader, leave=False):
