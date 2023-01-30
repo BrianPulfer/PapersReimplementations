@@ -17,8 +17,8 @@ import torch.nn as nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 
-from torchvision.datasets import CIFAR10
-from torchvision.transforms import Compose, ToTensor, Normalize, Resize, Lambda
+from torchvision.datasets import MNIST
+from torchvision.transforms import Compose, ToTensor, Resize, Lambda
 
 
 # Definitions
@@ -35,25 +35,25 @@ def parse_args():
 
     # Data arguments
     parser.add_argument(f"--image_size", type=int,
-                        help="Size to which reshape CIFAR images", default=16)
+                        help="Size to which reshape CIFAR images. Default is 14 (196 nodes).", default=14)
 
     # Model arguments
-    parser.add_argument(f"--type", type=str, help="Type of the network used.",
+    parser.add_argument(f"--type", type=str, help="Type of the network used. Default is 'attn'",
                         choices=NETWORK_TYPES, default="attn")
     parser.add_argument(f"--aggregation", type=str, help="Aggregation function",
-                        choices=list(AGGREGATION_FUNCTIONS.keys()), default="sum")
+                        choices=list(AGGREGATION_FUNCTIONS.keys()), default="avg")
     parser.add_argument(f"--n_layers", type=int,
                         help="Number of layers of the GNNs", default=8)
 
     # Training arguments
     parser.add_argument(f"--epochs", type=int,
-                        help="Training epochs. Default is 100.", default=100)
+                        help="Training epochs. Default is 10.", default=10)
     parser.add_argument(f"--lr", type=float,
-                        help="Learning rate.", default=0.001)
+                        help="Learning rate. Default is 1e-2.", default=0.01)
     parser.add_argument(f"--batch_size", type=int,
-                        help="Batch size used for training. Default is 32.", default=32)
+                        help="Batch size used for training. Default is 64.", default=64)
     parser.add_argument(f"--checkpoint", type=str,
-                        help="Path to model checkpoints", default="gnn.pt")
+                        help="Path to model checkpoints. Default is 'gnn.pt'.", default="gnn.pt")
 
     return vars(parser.parse_args())
 
@@ -99,11 +99,6 @@ class GraphConvLayer(nn.Module):
         self.psi = PsiNetwork(d, d)
         self.coefficients = nn.Parameter(torch.ones((n, n)) / n)
         self.aggr = AGGREGATION_FUNCTIONS[aggr]
-        self.phi = nn.Sequential(
-            nn.Linear(2*d, d),
-            nn.ReLU(),
-            nn.Linear(d, d)
-        )
 
     def forward(self, H, A):
         weights = self.coefficients * A  # (N, N)
@@ -111,8 +106,7 @@ class GraphConvLayer(nn.Module):
         messages = torch.einsum(
             "nm, bnd -> bnmd", weights, features)  # (B, N, N, D)
         messages = self.aggr(messages)  # (B, N, D)
-        phi_input = torch.cat((messages, H), dim=-1)  #  (B, N, 2*D)
-        return self.phi(phi_input)  # (B, N, D)
+        return messages
 
 
 class Attention(nn.Module):
@@ -121,10 +115,11 @@ class Attention(nn.Module):
         self.dim = dim
 
     def forward(self, x, mask=None):
-        attn_cues = ((x @ x.transpose(-2, -1)) / (self.dim**0.5 + 1e-5))
+        # x has shape (B, N, D)
+        attn_cues = ((x @ x.transpose(-2, -1)) / (self.dim**0.5 + 1e-5)) # (B, N, N)
 
         if mask is not None:
-            attn_cues.masked_fill(mask == 0, float("-inf"))
+            attn_cues = attn_cues.masked_fill(mask == 0, float("-inf"))
 
         attn_cues = attn_cues.softmax(-1)
         return attn_cues
@@ -144,11 +139,6 @@ class GraphAttentionLayer(nn.Module):
         self.ln2 = nn.LayerNorm(2*d)
         self.psi = PsiNetwork(d, d)
         self.sa = Attention(d)
-        self.phi = nn.Sequential(
-            nn.Linear(2*d, d),
-            nn.ReLU(),
-            nn.Linear(d, d)
-        )
 
     def forward(self, H, A):
         messages = self.psi(self.ln1(H))  #  (B, N, D)
@@ -157,10 +147,7 @@ class GraphAttentionLayer(nn.Module):
         messages = torch.einsum("bnm, bmd -> bndm", attn,
                                 messages)  #  (B, N, D, N)
         messages = self.aggr(messages, dim=-1)  # (B, N, D)
-
-        phi_input = torch.cat((messages, H), dim=-1)
-        return self.phi(self.ln2(phi_input)) + H
-
+        return messages
 
 class GraphMPLayer(nn.Module):
     """
@@ -185,6 +172,13 @@ class GraphNeuralNetwork(nn.Module):
         "conv": GraphConvLayer,
         "mp": GraphMPLayer
     }
+    
+    def _get_phi_net(self, dim_in, dim_out):
+        return nn.Sequential(
+            nn.Linear(dim_in, dim_out),
+            nn.ReLU(),
+            nn.Linear(dim_out, dim_out)
+        )
 
     def __init__(self, net_type, n_layers, n, d_in, d_hidden, d_out, aggr):
         super(GraphNeuralNetwork, self).__init__()
@@ -197,6 +191,8 @@ class GraphNeuralNetwork(nn.Module):
         self.layers = nn.ModuleList(
             [self._NET_TYPE_TO_LAYER[net_type](n, d_hidden, aggr)
              for _ in range(n_layers)])
+        
+        self.phi_nets = nn.ModuleList([self._get_phi_net(2*d_hidden, d_hidden) for _ in range(n_layers)])
 
         self.out_aggr = AGGREGATION_FUNCTIONS[aggr]
         self.out_mlp = nn.Sequential(
@@ -209,8 +205,9 @@ class GraphNeuralNetwork(nn.Module):
         # X has shape (B, N, D) and represents the edges.
         # A is binary with shape (N, N) and represents the adjacency matrix.
         H = self.encoding(X)
-        for l in self.layers:
-            H = l(H, A)
+        for l, p in zip(self.layers, self.phi_nets):
+            messages = l(H, A)
+            H = H + p(torch.cat((H, messages), dim=-1))
         return self.out_mlp(self.out_aggr(H))
 
 
@@ -228,13 +225,12 @@ def main():
     transform = Compose([
         ToTensor(),
         Resize((img_size, img_size)),
-        Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
         # (C, H, W) -> (H*W, C).
-        Lambda(lambda x: x.flatten(1).transpose(1, 0))
+        Lambda(lambda x: x.flatten().reshape(-1, 1))
     ])
-    train_set = CIFAR10("./../datasets", train=True,
+    train_set = MNIST("./../datasets", train=True,
                         transform=transform, download=True)
-    test_set = CIFAR10("./../datasets", train=False,
+    test_set = MNIST("./../datasets", train=False,
                        transform=transform, download=True)
 
     train_loader = DataLoader(
@@ -255,9 +251,8 @@ def main():
 
     # Creating model
     # Number of edges, edge dimensionality, hidden dimensionality and number of output classes
-    n, d, h, o = img_size**2, 3, 16, 10
-    model = GraphNeuralNetwork(
-        args["type"], args["n_layers"], n, d, h, o, aggr=args["aggregation"])
+    n, d, h, o = img_size**2, 1, 16, 10
+    model = GraphNeuralNetwork(args["type"], args["n_layers"], n, d, h, o, aggr=args["aggregation"])
 
     # Training loop
     n_epochs = args["epochs"]
@@ -270,7 +265,7 @@ def main():
     min_loss = float("inf")
     progress_bar = tqdm(range(1, n_epochs+1))
 
-    """wandb.init(project="Papers Re-implementations",
+    wandb.init(project="Papers Re-implementations",
                entity="peutlefaire",
                name=f"GNN ({args['type']})",
                config={
@@ -280,7 +275,7 @@ def main():
                    "epochs": n_epochs,
                    "batch_size": args["batch_size"],
                    "lr": args["lr"]
-               })"""
+               })
 
     for epoch in progress_bar:
         epoch_loss = 0.0
@@ -288,30 +283,31 @@ def main():
             x, y = batch
             x, y = x.to(device), y.to(device)
 
-            loss = criterion(model(x, A), y) / len(train_loader)
+            loss = criterion(model(x, A), y) / len(batch)
             epoch_loss += loss.item()
             optim.zero_grad()
             loss.backward()
             optim.step()
 
-            """wandb.log({
+            wandb.log({
                 "batch loss": loss.item()
-            })"""
+            })
 
         description = f"Epoch {epoch}/{n_epochs} - Training loss: {epoch_loss:.3f}"
         if epoch_loss < min_loss:
             min_loss = epoch_loss
             torch.save(model.state_dict(), checkpoint)
             description += "  -> ✅ Stored best model."
-
+        
+        wandb.log({"epoch loss": epoch_loss})
         progress_bar.set_description(description)
-    """wandb.finish()"""
+    wandb.finish()
 
     # Testing loop
+    model.load_state_dict(torch.load(checkpoint, map_location=device))
+    model = model.eval()
     with torch.no_grad():
         correct, total = 0, 0
-        model.load_state_dict(torch.load(checkpoint, map_location=device))
-        model = model.eval()
         for batch in test_loader:
             x, y = batch
             x, y = x.to(device), y.to(device)
