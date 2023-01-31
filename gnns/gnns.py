@@ -49,7 +49,7 @@ def parse_args():
     parser.add_argument(f"--epochs", type=int,
                         help="Training epochs. Default is 10.", default=10)
     parser.add_argument(f"--lr", type=float,
-                        help="Learning rate. Default is 1e-2.", default=0.01)
+                        help="Learning rate. Default is 1e-3.", default=0.001)
     parser.add_argument(f"--batch_size", type=int,
                         help="Batch size used for training. Default is 64.", default=64)
     parser.add_argument(f"--checkpoint", type=str,
@@ -102,10 +102,9 @@ class GraphConvLayer(nn.Module):
 
     def forward(self, H, A):
         weights = self.coefficients * A  # (N, N)
-        features = self.psi(H)  # (B, N, D)
-        messages = torch.einsum(
-            "nm, bnd -> bnmd", weights, features)  # (B, N, N, D)
-        messages = self.aggr(messages)  # (B, N, D)
+        messages = self.psi(H)  # (B, N, D)
+        messages = torch.einsum("nm, bmd -> bndm", weights, messages)  # (B, N, D, N)
+        messages = self.aggr(messages, dim=-1)  # (B, N, D)
         return messages
 
 
@@ -283,8 +282,8 @@ def main():
             x, y = batch
             x, y = x.to(device), y.to(device)
 
-            loss = criterion(model(x, A), y) / len(batch)
-            epoch_loss += loss.item()
+            loss = criterion(model(x, A), y)
+            epoch_loss += loss.item() / len(train_loader)
             optim.zero_grad()
             loss.backward()
             optim.step()
