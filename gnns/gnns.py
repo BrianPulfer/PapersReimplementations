@@ -6,23 +6,20 @@ Useful links:
  - Petar Veličković PDF talk: https://petar-v.com/talks/GNN-EEML.pdf
 """
 
-import warnings
-from tqdm import tqdm
-from argparse import ArgumentParser
-
-import wandb
-
-import torch
-import torch.nn as nn
-from torch.optim import Adam
-from torch.utils.data import DataLoader
-
-from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, ToTensor, Resize, Lambda
+from torchvision.datasets import MNIST
+from torch.utils.data import DataLoader
+from torch.optim import Adam
+import torch.nn as nn
+import torch
+import wandb
+from argparse import ArgumentParser
+from tqdm import tqdm
+import warnings
 
 
 # Definitions
-NETWORK_TYPES = ["attn", "conv", "mp"]
+NETWORK_TYPES = ["attn", "conv"]
 AGGREGATION_FUNCTIONS = {
     "sum": lambda X, dim=1: torch.sum(X, dim=dim),
     "avg": lambda X, dim=1: torch.mean(X, dim=dim)
@@ -41,6 +38,8 @@ def parse_args():
     parser.add_argument(f"--type", type=str, help="Type of the network used. Default is 'attn'",
                         choices=NETWORK_TYPES, default="attn")
     parser.add_argument(f"--aggregation", type=str, help="Aggregation function",
+                        choices=list(AGGREGATION_FUNCTIONS.keys()), default="avg")
+    parser.add_argument(f"--aggregation_out", type=str, help="Aggregation function for graph classification",
                         choices=list(AGGREGATION_FUNCTIONS.keys()), default="avg")
     parser.add_argument(f"--n_layers", type=int,
                         help="Number of layers of the GNNs", default=8)
@@ -96,14 +95,16 @@ class GraphConvLayer(nn.Module):
     def __init__(self, n, d, aggr):
         super(GraphConvLayer, self).__init__()
 
-        self.psi = PsiNetwork(d, d)
         self.coefficients = nn.Parameter(torch.ones((n, n)) / n)
-        self.aggr = AGGREGATION_FUNCTIONS[aggr]
+        self.ln = nn.LayerNorm(d)
+        self.psi = PsiNetwork(d, d)
+        self.aggr = aggr
 
     def forward(self, H, A):
         weights = self.coefficients * A  # (N, N)
-        messages = self.psi(H)  # (B, N, D)
-        messages = torch.einsum("nm, bmd -> bndm", weights, messages)  # (B, N, D, N)
+        messages = self.psi(self.ln(H))  # (B, N, D)
+        messages = torch.einsum(
+            "nm, bmd -> bndm", weights, messages)  # (B, N, D, N)
         messages = self.aggr(messages, dim=-1)  # (B, N, D)
         return messages
 
@@ -115,7 +116,8 @@ class Attention(nn.Module):
 
     def forward(self, x, mask=None):
         # x has shape (B, N, D)
-        attn_cues = ((x @ x.transpose(-2, -1)) / (self.dim**0.5 + 1e-5)) # (B, N, N)
+        attn_cues = ((x @ x.transpose(-2, -1)) /
+                     (self.dim**0.5 + 1e-5))  #  (B, N, N)
 
         if mask is not None:
             attn_cues = attn_cues.masked_fill(mask == 0, float("-inf"))
@@ -133,10 +135,10 @@ class GraphAttentionLayer(nn.Module):
     def __init__(self, n, d, aggr):
         super(GraphAttentionLayer, self).__init__()
 
-        self.aggr = AGGREGATION_FUNCTIONS[aggr]
+        self.aggr = aggr
+        self.psi = PsiNetwork(d, d)
         self.ln1 = nn.LayerNorm(d)
         self.ln2 = nn.LayerNorm(2*d)
-        self.psi = PsiNetwork(d, d)
         self.sa = Attention(d)
 
     def forward(self, H, A):
@@ -148,30 +150,15 @@ class GraphAttentionLayer(nn.Module):
         messages = self.aggr(messages, dim=-1)  # (B, N, D)
         return messages
 
-class GraphMPLayer(nn.Module):
-    """
-    Graph Message-Passing Layer.
-    It computes the next hidden states of edges by learning affinity between neighboring edges.
-    """
-
-    def __init__(self, n, d, aggr):
-        super(GraphMPLayer, self).__init__()
-        # TODO
-
-    def forward(self, H, A):
-        # TODO
-        pass
-
 
 class GraphNeuralNetwork(nn.Module):
     """Graph Neural Network class."""
 
     _NET_TYPE_TO_LAYER = {
         "attn": GraphAttentionLayer,
-        "conv": GraphConvLayer,
-        "mp": GraphMPLayer
+        "conv": GraphConvLayer
     }
-    
+
     def _get_phi_net(self, dim_in, dim_out):
         return nn.Sequential(
             nn.Linear(dim_in, dim_out),
@@ -179,7 +166,7 @@ class GraphNeuralNetwork(nn.Module):
             nn.Linear(dim_out, dim_out)
         )
 
-    def __init__(self, net_type, n_layers, n, d_in, d_hidden, d_out, aggr):
+    def __init__(self, net_type, n_layers, n, d_in, d_hidden, d_out, aggr, aggr_out):
         super(GraphNeuralNetwork, self).__init__()
 
         assert net_type in NETWORK_TYPES, f"ERROR: GNN type {net_type} not supported. Pick one of {NETWORK_TYPES}"
@@ -188,12 +175,13 @@ class GraphNeuralNetwork(nn.Module):
         self.n_layers = n_layers
         self.encoding = nn.Linear(d_in, d_hidden)
         self.layers = nn.ModuleList(
-            [self._NET_TYPE_TO_LAYER[net_type](n, d_hidden, aggr)
+            [self._NET_TYPE_TO_LAYER[net_type](n, d_hidden, AGGREGATION_FUNCTIONS[aggr])
              for _ in range(n_layers)])
-        
-        self.phi_nets = nn.ModuleList([self._get_phi_net(2*d_hidden, d_hidden) for _ in range(n_layers)])
 
-        self.out_aggr = AGGREGATION_FUNCTIONS[aggr]
+        self.phi_nets = nn.ModuleList(
+            [self._get_phi_net(2*d_hidden, d_hidden) for _ in range(n_layers)])
+
+        self.out_aggr = AGGREGATION_FUNCTIONS[aggr_out]
         self.out_mlp = nn.Sequential(
             nn.Linear(d_hidden, d_hidden),
             nn.ReLU(),
@@ -228,9 +216,9 @@ def main():
         Lambda(lambda x: x.flatten().reshape(-1, 1))
     ])
     train_set = MNIST("./../datasets", train=True,
-                        transform=transform, download=True)
+                      transform=transform, download=True)
     test_set = MNIST("./../datasets", train=False,
-                       transform=transform, download=True)
+                     transform=transform, download=True)
 
     train_loader = DataLoader(
         train_set, batch_size=args["batch_size"], shuffle=True)
@@ -251,7 +239,8 @@ def main():
     # Creating model
     # Number of edges, edge dimensionality, hidden dimensionality and number of output classes
     n, d, h, o = img_size**2, 1, 16, 10
-    model = GraphNeuralNetwork(args["type"], args["n_layers"], n, d, h, o, aggr=args["aggregation"])
+    model = GraphNeuralNetwork(args["type"], args["n_layers"], n, d,
+                               h, o, aggr=args["aggregation"], aggr_out=args["aggregation_out"])
 
     # Training loop
     n_epochs = args["epochs"]
@@ -297,7 +286,7 @@ def main():
             min_loss = epoch_loss
             torch.save(model.state_dict(), checkpoint)
             description += "  -> ✅ Stored best model."
-        
+
         wandb.log({"epoch loss": epoch_loss})
         progress_bar.set_description(description)
     wandb.finish()
@@ -315,7 +304,6 @@ def main():
             total += len(y)
     print(f"\n\nFinal test accuracy: {(correct / total * 100):.2f}%")
     print("Program completed successfully!")
-
 
 if __name__ == "__main__":
     main()
