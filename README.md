@@ -18,15 +18,15 @@ Check out the [Blog](https://medium.com/mlearning-ai/enerating-images-with-ddpms
 for a step-by-step explanation.
 
 ## gnns
-(🚧 This is still work in progress)
+Implementation of **Convolutional** and **Attentional** Graph Neural Networks (**GNNs**) taking inspiration from Petar Veličković "_Everything is Connected: Graph Neural Networks_" [survey](https://arxiv.org/pdf/2301.08210v1.pdf). Graph neural networks implemented differ in the way messages are passed.
 
-Implementation of various Graph Neural Networks (GNNs) taking inspiration from Petar Veličković "_Everything is Connected: Graph Neural Networks_" [survey](https://arxiv.org/pdf/2301.08210v1.pdf). Graph neural networks implemented differ in the way messages are passed (from least to most expressive):
+I use these GNNs for the task of image classification (Graph property prediction) converting the MNIST digits into connected graphs (each pixel is a node, and it is connected to its neighbouring pixels in space). 
 
- - Convolutional GNN
- - Attentional GNN
- - Message-Passing GNN
+:warning: The implementation is inefficient for sparsely connected graph, as all possible connections are considered before being masked by the adjecency matrix (squared complexity in the number of nodes). The goal is to simply familiarize with GNNs.
 
-I use these GNNs for the task of image classification (Graph property prediction) on the CIFAR-10 dataset.
+<img src="./gnns/training.png" />
+
+From this implementation from scratch it is noticeable how the convolutional GNN converges faster than the more powerful attentional GNN for the toy dataset which favours the inductive bias provided by the convolution.
 
 ## gpt
 

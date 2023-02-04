@@ -305,5 +305,6 @@ def main():
     print(f"\n\nFinal test accuracy: {(correct / total * 100):.2f}%")
     print("Program completed successfully!")
 
+
 if __name__ == "__main__":
     main()
