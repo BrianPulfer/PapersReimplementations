@@ -6,6 +6,7 @@ numpy
 matplotlib
 pandas
 pillow
+pre-commit
 imageio
 seaborn
 spacy
