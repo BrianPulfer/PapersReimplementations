@@ -27,7 +27,6 @@ class FFFMLP(nn.Module):
         self.hidden_dim = hidden_dim
         self.out_dim = out_dim
         self.swap_prob = swap_prob
-        self.use_swapping = True
 
         self.linear1 = nn.Linear(in_dim, hidden_dim)
         self.hidden_activation = hidden_activation
@@ -38,18 +37,10 @@ class FFFMLP(nn.Module):
         out = self.linear2(self.hidden_activation(self.linear1(x)))
         out = self.activation(out)
 
-        if self.use_swapping and torch.rand(1) < self.swap_prob:
+        if self.training and torch.rand(1) < self.swap_prob:
             out = 1 - out
 
         return out
-
-    def train(self, mode: bool = True):
-        self.use_swapping = True
-        return super().train(mode)
-
-    def eval(self):
-        self.use_swapping = False
-        return super().eval()
 
 
 class FFFLayer(nn.Module):
@@ -75,13 +66,32 @@ class FFFLayer(nn.Module):
         ]
         self.tree = nn.ModuleList(nodes + leaves)
 
-    def forward(self, x: torch.Tensor, idx: int = 1):
+    def forward(self, x: torch.Tensor, idx: int = 1, activations: list = None):
         c = self.tree[idx - 1](x)
 
         if 2 * idx + 1 <= len(self.tree):
-            left = self.forward(x, 2 * idx)
-            right = self.forward(x, 2 * idx + 1)
+            # Continuing down the tree
+            if self.training:
+                # During training, split signal all over the tree
+                left, a_left = self.forward(x, 2 * idx, activations)
+                right, a_right = self.forward(x, 2 * idx + 1, activations)
 
-            return c * left + (1 - c) * right
+                children_are_leaves = a_left is None and a_right is None
+                activations = [c] if children_are_leaves else a_left + a_right + [c]
 
-        return c
+                return c * left + (1 - c) * right, activations
+            else:
+                # During inference, input goes through a single path
+                left, a_left = self.forward(x, 2 * idx, activations)
+                right, a_right = self.forward(x, 2 * idx + 1, activations)
+
+                children_are_leaves = a_left is None and a_right is None
+                activations = [c] if children_are_leaves else a_left + a_right + [c]
+
+                # Hardening
+                # TODO: Improve and actually go down only one path
+                c = (c >= 0.5).float()
+
+                return c * left + (1 - c) * right, activations
+
+        return c, activations
