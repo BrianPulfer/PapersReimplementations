@@ -7,6 +7,7 @@ Current re-implementations include:
 - [Overview](#overview)
 - [Reimplementations](#reimplementations)
   - [DDPM - Denoise Diffusion Probabilistic Models](#ddpm---denoise-diffusion-probabilistic-models)
+  - [FFF - Fast Feedforward Networks](#fff---fast-feedforward-networks)
   - [GNNS - Graph Neural Networks](#gnns---graph-neural-networks)
   - [GPT - Generative Pre-trained Transformer](#gpt---generative-pre-trained-transformer)
   - [NF - Normalizing Flows](#nf---normalizing-flows)
@@ -27,6 +28,11 @@ Pre-trained models for both datasets (20 epochs only) are provided in the when
 using [Git Large File System](https://git-lfs.github.com/).
 Check out the [Blog](https://medium.com/mlearning-ai/enerating-images-with-ddpms-a-pytorch-implementation-cef5a2ba8cb1)
 for a step-by-step explanation.
+
+## FFF - Fast Feedforward Networks
+Re-implementation of [*Fast Feedforward Networks*](https://arxiv.org/abs/2308.14711v2) by Peter Belcak and Roger Wattenhofer. A fast feedforward network has a binary tree structure, where the goal is having the network learning in which path to send its input to do computations, instead of computing the whole sparse product typical in regular feedforward networks. During training, the input is sent throughout the computational tree and a weighted sum of the leaves activations is used. During testing, only one path down the tree is taken. The network is trained with an entropy penalty during training.
+
+In the main script, I use a single FFF network with depth 3 (8 leaves), input dimensionality 28 x 28 and hidden dimension of 32 for both leaves and nodes to learn a classifier for MNIST.
 
 ## GNNS - Graph Neural Networks
 <img src="./images/gnns_training.png" />
