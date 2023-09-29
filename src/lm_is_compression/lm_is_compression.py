@@ -160,7 +160,7 @@ def main(args):
     print("\n\nOriginal ids:", ids)
     print("Decoded  ids:", decoded[:, 1:])
 
-    print("\n\nEncoded sentences (as scalars):", encoded)
+    print("\n\nEncoded sentences (as scalars):", encoded.cpu().numpy())
 
 
 if __name__ == "__main__":

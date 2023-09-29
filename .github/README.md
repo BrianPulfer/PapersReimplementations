@@ -10,6 +10,7 @@ Current re-implementations include:
   - [FFF - Fast Feedforward Networks](#fff---fast-feedforward-networks)
   - [GNNS - Graph Neural Networks](#gnns---graph-neural-networks)
   - [GPT - Generative Pre-trained Transformer](#gpt---generative-pre-trained-transformer)
+  - [Language Modelling is Compression](#language-modelling-is-compression)
   - [NF - Normalizing Flows](#nf---normalizing-flows)
   - [PPO - Proximal Policy Optimization](#ppo---proximal-policy-optimization)
   - [ViT - Vision Transformers](#vit---vision-transformers)
@@ -74,6 +75,13 @@ against planned the steps. The next purpose were interested. The same of
 the tongue of the Revolution is were reality. The programmans that he had
 stopped involving the Spies intercounted as phrase.
 ```
+
+## Language Modelling is Compression
+Implementation of "_Language Modelling Is Compression_" [paper](https://arxiv.org/abs/2309.10668) by Delétang and Ruoss et. al. I use a pre-trained language model to encode, using arithmetic encoding, full sentences into scalars in range `[0, 1]`. Every scalar can then be de-coded into the input ids that made up the sentence.
+
+For example, using `EleutherAI/pythia-1.4b-v0`, the sentence "_`The quick brown fox jumps over the lazy dog`_" is encoded to the number `0.36453413`.
+
+Currently, this greatly suffers from precision errors, and only the first few tokens can be recovered exactly.
 
 ## NF - Normalizing Flows
 
