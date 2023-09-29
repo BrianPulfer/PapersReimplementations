@@ -1,6 +1,9 @@
 torch
 torchvision
 pytorch-lightning
+transformers
+accelerate
+deepspeed
 tensorboard
 numpy
 matplotlib
