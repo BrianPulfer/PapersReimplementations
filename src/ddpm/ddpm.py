@@ -8,14 +8,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import torch.nn as nn
-
-# Import of custom models
-from models import MyDDPM, MyUNet
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision.datasets.mnist import MNIST, FashionMNIST
 from torchvision.transforms import Compose, Lambda, ToTensor
 from tqdm.auto import tqdm
+
+# Import of custom models
+from src.ddpm.models import MyDDPM, MyUNet
 
 # Setting reproducibility
 SEED = 0
