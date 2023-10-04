@@ -12,6 +12,81 @@
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": false
+        },
+        {
+            "name": "ddpm",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/ddpm/ddpm.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "fff",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/fff/main.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "gnns",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/gnns/gnns.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "gpt",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/gpt/gpt.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "args": [
+                "--file", "${workspaceFolder}/src/gpt/1984_George_Orwell.txt"
+            ],
+            "justMyCode": true
+        },
+        {
+            "name": "lm compression",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/lm_is_compression/lm_is_compression.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "normalizing flows",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/nf/normalizing_flows.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "ppo",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/ppo/ppo.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "vit",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/vit/vit_torch.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
         }
     ]
 }
