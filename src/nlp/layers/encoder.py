@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 
 from src.nlp.layers.attention import MultiHeadAttention
@@ -52,9 +51,6 @@ class EncoderTransformer(nn.Module):
     ):
         super(EncoderTransformer, self).__init__()
 
-        self.embeddings = ...
-        self.pos_embeddings = ...
-
         self.blocks = nn.ModuleList(
             [
                 EncoderBlock(
@@ -64,10 +60,7 @@ class EncoderTransformer(nn.Module):
             ]
         )
 
-    def forward(self, idx, attn_mask=None):
-        hidden = self.embeddings(idx) + self.pos_embeddings(idx)
-
+    def forward(self, hidden, attn_mask=None):
         for block in self.blocks:
             hidden = block(hidden, attn_mask)
-
         return hidden
