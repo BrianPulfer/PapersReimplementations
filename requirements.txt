@@ -2,12 +2,14 @@ accelerate
 deepspeed
 einops
 gym
+gym[classic_control]
 imageio
 matplotlib
 numpy
 pandas
 pillow
 pre-commit
+python-dotenv
 pytorch-lightning
 seaborn
 spacy
