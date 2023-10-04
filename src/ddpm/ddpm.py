@@ -150,10 +150,14 @@ def generate_new_images(
     # Storing the gif
     with imageio.get_writer(gif_name, mode="I") as writer:
         for idx, frame in enumerate(frames):
-            writer.append_data(frame)
+            rgb_frame = np.repeat(frame, 3, axis=2)
+            writer.append_data(rgb_frame)
+
+            # Showing the last frame for a longer time
             if idx == len(frames) - 1:
+                last_rgb_frame = np.repeat(frames[-1], 3, axis=2)
                 for _ in range(frames_per_gif // 3):
-                    writer.append_data(frames[-1])
+                    writer.append_data(last_rgb_frame)
     return x
 
 
