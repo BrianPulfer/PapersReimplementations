@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from src.nlp.attention import MultiHeadAttention
-from src.nlp.mlp import MLP
+from src.nlp.layers.attention import MultiHeadAttention
+from src.nlp.layers.mlp import MLP
 
 
 class DecoderBlock(nn.Module):
