@@ -11,9 +11,10 @@ from argparse import ArgumentParser
 
 import torch
 import torch.nn as nn
-import wandb
 from torch.optim import Adam
 from tqdm import tqdm
+
+import wandb
 
 # Definitions
 NAME_TO_PARAMS = {
@@ -308,7 +309,6 @@ def training_loop(
         # Starting a new Weights & Biases run
         wandb.init(
             project="Papers Re-implementations",
-            entity="peutlefaire",
             name=name,
             config={
                 "depth": model.depth,

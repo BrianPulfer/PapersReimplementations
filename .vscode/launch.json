@@ -48,7 +48,7 @@
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "args": [
-                "--file", "${workspaceFolder}/src/gpt/1984_George_Orwell.txt"
+                "--file", "${workspaceFolder}/data/nlp/1984_George_Orwell.txt"
             ],
             "justMyCode": true
         },
@@ -59,6 +59,19 @@
             "program": "${workspaceFolder}/src/lm_is_compression/lm_is_compression.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "nlp - bert",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/nlp/bert/bert.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "args": [
+                "--train_file", "${workspaceFolder}/src/nlp/1984_George_Orwell.txt",
+                "--test_file", "${workspaceFolder}/src/nlp/bert/masked_sentences.txt",
+            ],
             "justMyCode": true
         },
         {
