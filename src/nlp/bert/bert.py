@@ -133,8 +133,8 @@ class Bert(pl.LightningModule):
         "lr": 1e-4,
         "betas": (0.9, 0.999),
         "weight_decay": 0.01,
-        "max_train_steps": 10_000,
-        "warmup_steps": 100,
+        "max_train_epochs": 10,
+        "warmup_epochs": 1,
     }
 
     def __init__(
@@ -217,12 +217,12 @@ class Bert(pl.LightningModule):
             betas=self.train_config["betas"],
         )
 
-        warmup = LinearLR(optim, total_iters=self.train_config["warmup_steps"])
+        warmup = LinearLR(optim, total_iters=self.train_config["warmup_epochs"])
         scheduler = LinearLR(
             optim,
             start_factor=1,
             end_factor=0.0,
-            total_iters=self.train_config["max_train_steps"],
+            total_iters=self.train_config["max_train_epochs"],
         )
 
         return [optim], [scheduler, warmup]
@@ -375,8 +375,8 @@ def main(args):
         train_config={
             "lr": lr,
             "weight_decay": weight_decay,
-            "max_train_steps": max_train_steps,
-            "warmup_steps": warmup_steps,
+            "max_train_epochs": max_train_steps // len(train_set) + 1,
+            "warmup_epochs": warmup_steps // len(train_set) + 1,
         },
     )
 
@@ -386,7 +386,7 @@ def main(args):
     callbacks = [ModelCheckpoint(save_dir, monitor="val_loss")]
     trainer = pl.Trainer(
         accelerator="auto",
-        strategy="ddp",
+        strategy="fsdp",
         max_steps=max_train_steps,
         logger=wandb_logger,
         callbacks=callbacks,
