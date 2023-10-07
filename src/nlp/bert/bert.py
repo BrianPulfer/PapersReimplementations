@@ -261,6 +261,7 @@ class Bert(pl.LightningModule):
         # Logging
         self.log_dict(
             {
+                "lr": self.optimizers().param_groups[0]["lr"],
                 "train_loss": loss,
                 "train_class_loss": class_loss,
                 "train_mlm_loss": mlm_loss,
