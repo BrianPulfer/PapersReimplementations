@@ -11,11 +11,13 @@ on the WikiText-2 dataset.
 import os
 import random
 from argparse import ArgumentParser
+from typing import Any
 
 import torch
 import torch.nn as nn
+from pytorch_lightning.utilities.types import STEP_OUTPUT
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import LinearLR
+from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader, Dataset
 
 torch.set_float32_matmul_precision("medium")
@@ -133,8 +135,8 @@ class Bert(pl.LightningModule):
         "lr": 1e-4,
         "betas": (0.9, 0.999),
         "weight_decay": 0.01,
-        "max_train_epochs": 10,
-        "warmup_epochs": 1,
+        "max_train_steps": 10_000,
+        "warmup_steps": 100,
     }
 
     def __init__(
@@ -160,6 +162,10 @@ class Bert(pl.LightningModule):
         self.depth = depth
         self.dropout = dropout
         self.train_config = Bert.DEFAULT_BERT_CONFIG
+
+        # Schedulers
+        self.linear_scheduler = None
+        self.warmup_scheduler = None
 
         # Training config
         if train_config is not None:
@@ -209,6 +215,14 @@ class Bert(pl.LightningModule):
         hidden = self.transformer(hidden, attn_mask=attn_mask)
         return hidden
 
+    def scheduler_fn(self, step):
+        warmup_steps = self.train_config["warmup_steps"]
+        max_steps = self.train_config["max_train_steps"]
+
+        if step < warmup_steps:
+            return step / warmup_steps
+        return 1 - (step - warmup_steps) / (max_steps - warmup_steps)
+
     def configure_optimizers(self):
         optim = AdamW(
             self.trainer.model.parameters(),
@@ -217,15 +231,9 @@ class Bert(pl.LightningModule):
             betas=self.train_config["betas"],
         )
 
-        warmup = LinearLR(optim, total_iters=self.train_config["warmup_epochs"])
-        scheduler = LinearLR(
-            optim,
-            start_factor=1,
-            end_factor=0.0,
-            total_iters=self.train_config["max_train_epochs"],
-        )
+        self.linear_scheduler = LambdaLR(optim, self.scheduler_fn)
 
-        return [optim], [scheduler, warmup]
+        return {"optimizer": optim}
 
     def get_losses(self, batch):
         # Unpacking batch
@@ -271,10 +279,22 @@ class Bert(pl.LightningModule):
                 "train_mlm_loss": mlm_loss,
                 "train_class_acc": c_acc,
                 "train_mlm_acc": m_acc,
-            }
+            },
+            sync_dist=True,
         )
 
         return loss
+
+    def on_train_batch_end(
+        self, outputs: STEP_OUTPUT, batch: Any, batch_idx: int
+    ) -> None:
+        if self.warmup_scheduler is not None:
+            self.warmup_scheduler.step()
+
+        if self.linear_scheduler is not None:
+            self.linear_scheduler.step()
+
+        return super().on_train_batch_end(outputs, batch, batch_idx)
 
     def validation_step(self, batch, batch_idx):
         # Getting losses
@@ -291,7 +311,8 @@ class Bert(pl.LightningModule):
                 "val_mlm_loss": mlm_loss,
                 "val_class_acc": c_acc,
                 "val_mlm_acc": m_acc,
-            }
+            },
+            sync_dist=True,
         )
 
         return loss
@@ -311,7 +332,8 @@ class Bert(pl.LightningModule):
                 "test_mlm_loss": mlm_loss,
                 "test_class_acc": c_acc,
                 "test_mlm_acc": m_acc,
-            }
+            },
+            sync_dist=True,
         )
 
         return loss
@@ -375,8 +397,8 @@ def main(args):
         train_config={
             "lr": lr,
             "weight_decay": weight_decay,
-            "max_train_epochs": max_train_steps // len(train_set) + 1,
-            "warmup_epochs": warmup_steps // len(train_set) + 1,
+            "max_train_steps": max_train_steps,
+            "warmup_steps": warmup_steps,
         },
     )
 
