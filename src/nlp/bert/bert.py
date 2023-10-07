@@ -133,7 +133,7 @@ class Bert(pl.LightningModule):
         "lr": 1e-4,
         "betas": (0.9, 0.999),
         "weight_decay": 0.01,
-        "training_steps": 10_000,
+        "max_train_steps": 10_000,
         "warmup_steps": 100,
     }
 
@@ -222,7 +222,7 @@ class Bert(pl.LightningModule):
             optim,
             start_factor=1,
             end_factor=0.0,
-            total_iters=self.train_config["training_steps"],
+            total_iters=self.train_config["max_train_steps"],
         )
 
         return [optim], [scheduler, warmup]
@@ -249,11 +249,15 @@ class Bert(pl.LightningModule):
             mlm_preds, mlm_labels[mlm_idx == 1]
         )
 
-        return class_loss, mlm_loss
+        # Getting accuracies
+        class_acc = (class_preds.argmax(dim=-1) == nsp_labels).float().mean()
+        mlm_acc = (mlm_preds.argmax(dim=-1) == mlm_labels[mlm_idx == 1]).float().mean()
+
+        return class_loss, mlm_loss, class_acc, mlm_acc
 
     def training_step(self, batch, batch_idx):
         # Getting losses
-        class_loss, mlm_loss = self.get_losses(batch)
+        class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
 
         # Total loss
         loss = class_loss + mlm_loss
@@ -265,6 +269,8 @@ class Bert(pl.LightningModule):
                 "train_loss": loss,
                 "train_class_loss": class_loss,
                 "train_mlm_loss": mlm_loss,
+                "train_class_acc": c_acc,
+                "train_mlm_acc": m_acc,
             }
         )
 
@@ -272,7 +278,7 @@ class Bert(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         # Getting losses
-        class_loss, mlm_loss = self.get_losses(batch)
+        class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
 
         # Total loss
         loss = class_loss + mlm_loss
@@ -283,6 +289,8 @@ class Bert(pl.LightningModule):
                 "val_loss": loss,
                 "val_class_loss": class_loss,
                 "val_mlm_loss": mlm_loss,
+                "val_class_acc": c_acc,
+                "val_mlm_acc": m_acc,
             }
         )
 
@@ -290,7 +298,7 @@ class Bert(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         # Getting losses
-        class_loss, mlm_loss = self.get_losses(batch)
+        class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
 
         # Total loss
         loss = class_loss + mlm_loss
@@ -301,6 +309,8 @@ class Bert(pl.LightningModule):
                 "test_loss": loss,
                 "test_class_loss": class_loss,
                 "test_mlm_loss": mlm_loss,
+                "test_class_acc": c_acc,
+                "test_mlm_acc": m_acc,
             }
         )
 
@@ -319,7 +329,7 @@ def main(args):
     dropout = args["dropout"]
     max_len = args["max_len"]
     batch_size = args["batch_size"]
-    epochs = args["epochs"]
+    max_train_steps = args["max_train_steps"]
     lr = args["lr"]
     weight_decay = args["weight_decay"]
     warmup_steps = args["warmup_steps"]
@@ -365,18 +375,19 @@ def main(args):
         train_config={
             "lr": lr,
             "weight_decay": weight_decay,
+            "max_train_steps": max_train_steps,
             "warmup_steps": warmup_steps,
         },
     )
 
     # Training
-    wandb_logger = WandbLogger(project="Papers Reimplementations", name="BERT")
+    wandb_logger = WandbLogger(project="Papers Re-implementations", name="BERT")
     wandb_logger.experiment.config.update(args)
     callbacks = [ModelCheckpoint(save_dir, monitor="val_loss")]
     trainer = pl.Trainer(
         accelerator="auto",
-        strategy="fsdp",
-        max_epochs=epochs,
+        strategy="ddp",
+        max_steps=max_train_steps,
         logger=wandb_logger,
         callbacks=callbacks,
         profiler="advanced",
@@ -403,7 +414,7 @@ if __name__ == "__main__":
 
     # Training parameters
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--max_train_steps", type=int, default=10_000)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--warmup_steps", type=int, default=100)
