@@ -171,10 +171,6 @@ class Bert(pl.LightningModule):
         if train_config is not None:
             self.train_config.update(train_config)
 
-        # Special tokens
-        self.cls_token = nn.Parameter(torch.randn(1, 1, hidden_dim) / hidden_dim**0.5)
-        self.sep_token = nn.Parameter(torch.randn(1, 1, hidden_dim) / hidden_dim**0.5)
-
         # Embeddings
         self.embeddings = nn.Embedding(vocab_size, hidden_dim)
         self.pos_embeddings = nn.Parameter(
@@ -213,15 +209,39 @@ class Bert(pl.LightningModule):
 
         # Transformer
         hidden = self.transformer(hidden, attn_mask=attn_mask)
-        return hidden
 
-    def scheduler_fn(self, step):
-        warmup_steps = self.train_config["warmup_steps"]
-        max_steps = self.train_config["max_train_steps"]
+        # Classification head based on CLS token
+        class_preds = self.classifier(hidden[:, 0])
 
-        if step < warmup_steps:
-            return step / warmup_steps
-        return 1 - (step - warmup_steps) / (max_steps - warmup_steps)
+        # Masked language modeling head
+        mlm_preds = self.mask_predictor(hidden)
+
+        return hidden, class_preds, mlm_preds
+
+    def get_losses(self, batch):
+        # Unpacking batch
+        ids = batch["input_ids"]
+        segment_ids = batch["segment_ids"]
+        attn_mask = batch["attn_mask"]
+        mlm_labels = batch["mlm_labels"]
+        mlm_idx = batch["mlm_idx"]
+        nsp_labels = batch["nsp_labels"]
+
+        # Running forward
+        _, class_preds, mlm_preds = self(ids, segment_ids, attn_mask)
+        mlm_preds, mlm_labels = mlm_preds[mlm_idx == 1], mlm_labels[mlm_idx == 1]
+
+        # Classification loss
+        class_loss = torch.nn.functional.cross_entropy(class_preds, nsp_labels)
+
+        # Masked language modeling loss
+        mlm_loss = torch.nn.functional.cross_entropy(mlm_preds, mlm_labels)
+
+        # Getting accuracies
+        class_acc = (class_preds.argmax(dim=-1) == nsp_labels).float().mean()
+        mlm_acc = (mlm_preds.argmax(dim=-1) == mlm_labels).float().mean()
+
+        return class_loss, mlm_loss, class_acc, mlm_acc
 
     def configure_optimizers(self):
         optim = AdamW(
@@ -235,36 +255,24 @@ class Bert(pl.LightningModule):
 
         return {"optimizer": optim}
 
-    def get_losses(self, batch):
-        # Unpacking batch
-        ids = batch["input_ids"]
-        segment_ids = batch["segment_ids"]
-        attn_mask = batch["attn_mask"]
-        mlm_labels = batch["mlm_labels"]
-        mlm_idx = batch["mlm_idx"]
-        nsp_labels = batch["nsp_labels"]
+    def scheduler_fn(self, step):
+        warmup_steps = self.train_config["warmup_steps"]
+        max_steps = self.train_config["max_train_steps"]
 
-        # Forward pass
-        hidden = self(ids, segment_ids, attn_mask)
+        if step < warmup_steps:
+            return step / warmup_steps
+        return 1 - (step - warmup_steps) / (max_steps - warmup_steps)
 
-        # Classification logits based on the CLS token
-        class_preds = self.classifier(hidden[:, 0])
-        class_loss = torch.nn.functional.cross_entropy(class_preds, nsp_labels)
+    def on_train_batch_end(
+        self, outputs: STEP_OUTPUT, batch: Any, batch_idx: int
+    ) -> None:
+        if self.linear_scheduler is not None:
+            self.linear_scheduler.step()
 
-        # Masked language modeling loss
-        mlm_preds = self.mask_predictor(hidden[mlm_idx == 1])
-        mlm_loss = torch.nn.functional.cross_entropy(
-            mlm_preds, mlm_labels[mlm_idx == 1]
-        )
-
-        # Getting accuracies
-        class_acc = (class_preds.argmax(dim=-1) == nsp_labels).float().mean()
-        mlm_acc = (mlm_preds.argmax(dim=-1) == mlm_labels[mlm_idx == 1]).float().mean()
-
-        return class_loss, mlm_loss, class_acc, mlm_acc
+        return super().on_train_batch_end(outputs, batch, batch_idx)
 
     def training_step(self, batch, batch_idx):
-        # Getting losses
+        # Getting losses & accuracies
         class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
 
         # Total loss
@@ -285,19 +293,8 @@ class Bert(pl.LightningModule):
 
         return loss
 
-    def on_train_batch_end(
-        self, outputs: STEP_OUTPUT, batch: Any, batch_idx: int
-    ) -> None:
-        if self.warmup_scheduler is not None:
-            self.warmup_scheduler.step()
-
-        if self.linear_scheduler is not None:
-            self.linear_scheduler.step()
-
-        return super().on_train_batch_end(outputs, batch, batch_idx)
-
     def validation_step(self, batch, batch_idx):
-        # Getting losses
+        # Getting losses & accuracies
         class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
 
         # Total loss
@@ -318,7 +315,7 @@ class Bert(pl.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
-        # Getting losses
+        # Getting losses & accuracies
         class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
 
         # Total loss
@@ -405,19 +402,19 @@ def main(args):
     # Training
     wandb_logger = WandbLogger(project="Papers Re-implementations", name="BERT")
     wandb_logger.experiment.config.update(args)
-    callbacks = [ModelCheckpoint(save_dir, monitor="val_loss")]
+    callbacks = [ModelCheckpoint(save_dir, monitor="val_loss", filename="best")]
     trainer = pl.Trainer(
         accelerator="auto",
-        strategy="fsdp",
+        strategy="ddp",  # State dict not saved with fsdp for some reason
         max_steps=max_train_steps,
         logger=wandb_logger,
         callbacks=callbacks,
-        profiler="advanced",
+        profiler="simple",
     )
     trainer.fit(bert, train_loader, val_loader)
 
     # Testing the best model
-    bert = Bert.load_from_checkpoint(save_dir)
+    bert = Bert.load_from_checkpoint(os.path.join(save_dir, "best.ckpt"))
     trainer.test(bert, test_loader)
 
     # Unmasking sentences
@@ -440,7 +437,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--warmup_steps", type=int, default=100)
-    parser.add_argument("--save", type=str, default="models/bert.pt")
+    parser.add_argument("--save", type=str, default="checkpoints/bert.pt")
 
     # Other parameters
     parser.add_argument("--seed", type=int, default=0)

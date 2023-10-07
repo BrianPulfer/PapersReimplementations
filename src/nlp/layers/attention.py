@@ -17,7 +17,9 @@ class Attention(nn.Module):
 
         # Mask interactions that should not be captured
         if mask is not None:
-            attn[mask == 0] = float("-inf")
+            if mask.ndim == 2:
+                mask = mask.unsqueeze(1)
+            attn = attn.masked_fill(mask == 0, float("-inf"))
 
         # Computing final output by multiplying attention scores with values
         attn = self.softmax(attn)
