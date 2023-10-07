@@ -370,6 +370,7 @@ def main(args):
 
     # Training
     wandb_logger = WandbLogger(project="Papers Reimplementations", name="BERT")
+    wandb_logger.experiment.config.update(args)
     callbacks = [ModelCheckpoint(save_dir, monitor="val_loss")]
     trainer = pl.Trainer(
         accelerator="auto",
