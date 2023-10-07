@@ -12,7 +12,9 @@ def wordpiece_train(corpus, vocab_size):
     vocab = set(corpus)
 
     # Keep merging most likely pairs until the vocabulary is the desired size
-    for i in tqdm(range(vocab_size - len(vocab))):
+    for i in tqdm(
+        range(vocab_size - len(vocab)), desc="Training wordpiece tokenizer..."
+    ):
         counts = {}
         pair_counts = {}
 
