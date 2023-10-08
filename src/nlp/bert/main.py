@@ -136,7 +136,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=0.01)
     parser.add_argument("--warmup_steps", type=int, default=100)
-    parser.add_argument("--save", type=str, default="checkpoints/bert.pt")
+    parser.add_argument("--save", type=str, default="checkpoints/bert")
 
     # Testing parameters
     parser.add_argument(
