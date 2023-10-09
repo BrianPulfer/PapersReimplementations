@@ -86,6 +86,8 @@ class Bert(pl.LightningModule):
 
         if segment_ids is not None:
             hidden += self.sentence_embeddings[segment_ids]
+        else:
+            hidden += self.sentence_embeddings[0]
 
         # Transformer
         hidden = self.transformer(hidden, attn_mask=attn_mask)

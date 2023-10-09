@@ -1,0 +1,3 @@
+Paris is the [MASK] of France.
+World War II started in [MASK] and ended in [MASK].
+The term AI stands for [MASK] Intelligence.

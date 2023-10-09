@@ -5,13 +5,29 @@ from torch.utils.data import Dataset
 
 
 class BertDataset(Dataset):
-    def __init__(self, dataset, tokenizer, max_length, mlm_ratio=0.15, mask_ratio=0.8):
+    """Creates a dataset for BERT training where each sample is broken into two sentences."""
+
+    def __init__(
+        self,
+        dataset,
+        tokenizer,
+        max_length,
+        sentence_divider="\n\n",
+        mlm_ratio=0.15,
+        mask_ratio=0.8,
+    ):
         super(BertDataset, self).__init__()
 
+        # Filtering empty sentences
+        self.dataset = dataset.filter(
+            lambda sample: len(sample["text"]) > 0
+            and sentence_divider in sample["text"],
+        )
+
         # Dataset parameters
-        self.dataset = dataset
         self.tokenizer = tokenizer
         self.max_length = max_length
+        self.sentence_divider = sentence_divider
         self.mlm_ratio = mlm_ratio
         self.mask_ratio = mask_ratio
 
@@ -24,28 +40,30 @@ class BertDataset(Dataset):
         )
         self.mask_dist = torch.distributions.Multinomial(probs=probs)
 
-        # Tokenizing dataset
-        self.dataset = self.dataset.map(
-            lambda samples: {"text": [txt for txt in samples["text"] if len(txt) > 0]},
-            batched=True,
-        )
-
     def __len__(self):
-        return len(self.dataset) - 1
+        return len(self.dataset)
 
     def __getitem__(self, index):
         # First sentence
-        s1 = self.dataset[index]["text"]
+        sentences = self.dataset[index]["text"].split(self.sentence_divider)
+        n_sentences = len(sentences)
+
+        # Picking first sentence
+        s1_idx = random.randint(0, n_sentences - 2)
+        s1 = sentences[s1_idx]
 
         # Next sentence and prediction label
         if torch.rand(1) > 0.5:
             # 50% of the time, pick the real next "sentence"
-            s2 = self.dataset[index + 1]["text"]
+            s2 = sentences[(s1_idx + 1)]
             nsp_label = 1
         else:
             # The other 50% of the time, pick a random next "sentence"
-            idx = random.randint(0, len(self.dataset) - 1)
-            s2 = self.dataset[idx]["text"]
+            idx = random.randint(0, len(self.dataset))
+            if idx == index:
+                idx = idx + 1 % len(self.dataset)
+            sentences_other = self.dataset[index]["text"].split(self.sentence_divider)
+            s2 = sentences_other[random.randint(0, len(sentences_other) - 1)]
             nsp_label = 0
 
         # Preparing input ids
@@ -57,6 +75,7 @@ class BertDataset(Dataset):
             max_length=self.max_length,
             truncation=True,
         )
+
         input_ids, segment_idx, attn_mask = (
             tokenizer_out["input_ids"][0],
             tokenizer_out["token_type_ids"][0],
@@ -91,10 +110,3 @@ class BertDataset(Dataset):
             "mlm_idx": mlm_idx,
             "nsp_labels": nsp_label,
         }
-
-    def tokenize_fn(self, examples):
-        ids = [
-            self.tokenizer(txt)["input_ids"] for txt in examples["text"] if len(txt) > 0
-        ]
-        ids = torch.tensor(ids)
-        return ids

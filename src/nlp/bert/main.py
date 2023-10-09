@@ -29,8 +29,42 @@ from src.nlp.bert.data import BertDataset
 from src.nlp.bert.model import Bert
 
 
-def unmask_sentences(bert, test_file):
-    pass
+def unmask_sentences(bert, tokenizer, max_length, file_path):
+    """Uses the bert model to unmask sentences from a file. Prints the unmaksed sentences."""
+    file = open(file_path, "r")
+    lines = file.readlines()
+    lines = [line if not line.endswith("\n") else line[:-1] for line in lines]
+    file.close()
+
+    for i, line in enumerate(lines):
+        # Preparing input
+        input_ids = tokenizer(
+            line,
+            return_tensors="pt",
+            max_length=max_length,
+            padding="max_length",
+            truncation=True,
+        )["input_ids"].cuda()
+        segment_ids = torch.zeros_like(input_ids)
+        attn_mask = None
+
+        # Running BERT
+        _, _, mlm_preds = bert(input_ids)
+
+        # Getting predictions for the MASK'd words
+        unmasked_words = mlm_preds[input_ids == tokenizer.mask_token_id].argmax(dim=-1)
+        unmasked_words = tokenizer.decode(unmasked_words).split(" ")
+
+        # Reconstructing the unmasked sentence
+        sentence = ""
+        parts = line.split("[MASK]")
+        for word in unmasked_words:
+            sentence += parts.pop(0) + word
+        sentence += parts.pop(0)
+
+        # Showing results
+        print(f"\n\nSENTENCE {i+1}:")
+        print(f"\tOriginal: {line}\n\tUnmasked: {sentence}")
 
 
 def main(args):
@@ -50,22 +84,30 @@ def main(args):
     weight_decay = args["weight_decay"]
     warmup_steps = args["warmup_steps"]
     save_dir = args["save"]
-    test_file = args["masked_sentences"]
+    file_path = args["masked_sentences"]
     seed = args["seed"]
 
     # Setting random seed
     pl.seed_everything(seed)
 
-    # Load the dataset
-    wikitext = load_dataset("wikitext", "wikitext-2-v1")
-    wikitext.set_format(type="torch", columns=["text"])
+    # Load the dataset (wikipedia only has 'train', so we split it ourselves)
+    train_set = load_dataset("wikipedia", "20220301.en", split="train[:70%]")
+    val_set = load_dataset("wikipedia", "20220301.en", split="train[80%:90%]")
+    test_set = load_dataset("wikipedia", "20220301.en", split="train[90%:]")
+
+    # Setting format to torch (possibly not necessary)
+    train_set.set_format(type="torch", columns=["text"])
+    val_set.set_format(type="torch", columns=["text"])
+    test_set.set_format(type="torch", columns=["text"])
+
+    # Bert tokenizer
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
-    # Splitting into train, validation and test sets
+    # Wrapping dataset with Bert logic for batches
     train_set, val_set, test_set = (
-        BertDataset(wikitext["train"], tokenizer, max_len),
-        BertDataset(wikitext["validation"], tokenizer, max_len),
-        BertDataset(wikitext["test"], tokenizer, max_len),
+        BertDataset(train_set, tokenizer, max_len),
+        BertDataset(val_set, tokenizer, max_len),
+        BertDataset(test_set, tokenizer, max_len),
     )
 
     # Data loaders
@@ -113,11 +155,11 @@ def main(args):
 
     # Testing the best model
     bert = Bert.load_from_checkpoint(os.path.join(save_dir, "best.ckpt"))
-    trainer.test(bert, test_loader)
+    # trainer.test(bert, test_loader)
 
-    if test_file is not None and os.path.isfile(test_file):
+    if file_path is not None and os.path.isfile(file_path):
         # Unmasking sentences
-        unmask_sentences(bert, test_file)
+        unmask_sentences(bert, tokenizer, max_len, file_path)
 
 
 if __name__ == "__main__":
