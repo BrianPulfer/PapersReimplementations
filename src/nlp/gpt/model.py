@@ -7,11 +7,11 @@ from pytorch_lightning.utilities.types import STEP_OUTPUT
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 
-from src.nlp.layers.encoder import EncoderTransformer
+from src.nlp.layers.decoder import DecoderTransformer
 
 
-class Bert(pl.LightningModule):
-    DEFAULT_BERT_CONFIG = {
+class GPT(pl.LightningModule):
+    DEFAULT_GPT_CONFIG = {
         "lr": 1e-4,
         "betas": (0.9, 0.999),
         "weight_decay": 0.01,
@@ -29,7 +29,7 @@ class Bert(pl.LightningModule):
         dropout=0.1,
         train_config=None,
     ):
-        super(Bert, self).__init__()
+        super(GPT, self).__init__()
 
         # Saving hyper-parameters so that they are logged
         self.save_hyperparameters()
@@ -41,7 +41,8 @@ class Bert(pl.LightningModule):
         self.n_heads = n_heads
         self.depth = depth
         self.dropout = dropout
-        self.train_config = Bert.DEFAULT_BERT_CONFIG
+        self.train_config = GPT.DEFAULT_GPT_CONFIG
+        self.cross_entropy = nn.CrossEntropyLoss()
 
         # Schedulers
         self.linear_scheduler = None
@@ -56,74 +57,43 @@ class Bert(pl.LightningModule):
         self.pos_embeddings = nn.Parameter(
             torch.randn(max_len, hidden_dim) / hidden_dim**0.5
         )
-        self.sentence_embeddings = nn.Parameter(
-            torch.randn(2, hidden_dim) / hidden_dim**0.5
-        )
 
         # Transformer and output layer
-        self.transformer = EncoderTransformer(
+        self.transformer = DecoderTransformer(
             hidden_dim, n_heads, depth, dropout_p=dropout
         )
 
-        # Next sentence classifier
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim), nn.Tanh(), nn.Linear(hidden_dim, 2)
-        )
+        # Next token classifier
+        self.classifier = nn.LayerNorm(hidden_dim)
 
-        # Masked language modeling head
-        self.mask_predictor = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.GELU(),
-            nn.LayerNorm(hidden_dim),
-            nn.Linear(hidden_dim, vocab_size, bias=True),
-        )
-
-    def forward(self, ids, segment_ids=None, attn_mask=None):
+    def forward(self, ids, attn_mask=None):
         # Embedding
         b, t = ids.shape
         hidden = self.embeddings(ids)
         hidden += self.pos_embeddings[:t].repeat(b, 1, 1)
 
-        if segment_ids is not None:
-            hidden += self.sentence_embeddings[segment_ids]
-        else:
-            hidden += self.sentence_embeddings[0]
-
         # Transformer
-        hidden = self.transformer(hidden, attn_mask=attn_mask)
+        hidden = self.transformer(hidden, self_attn_mask=attn_mask)
 
-        # Classification head based on CLS token
-        class_preds = self.classifier(hidden[:, 0])
-
-        # Masked language modeling head
-        mlm_preds = self.mask_predictor(hidden)
-
-        return hidden, class_preds, mlm_preds
+        # Classification
+        return self.classifier(hidden)
 
     def get_losses(self, batch):
         # Unpacking batch
         ids = batch["input_ids"]
-        segment_ids = batch["segment_ids"]
         attn_mask = batch["attention_mask"]
-        mlm_labels = batch["mlm_labels"]
-        mlm_idx = batch["mlm_idx"]
-        nsp_labels = batch["nsp_labels"]
 
         # Running forward
-        _, class_preds, mlm_preds = self(ids, segment_ids, attn_mask)
-        mlm_preds, mlm_labels = mlm_preds[mlm_idx == 1], mlm_labels[mlm_idx == 1]
+        out = self(ids, attn_mask)
 
-        # Classification loss
-        class_loss = torch.nn.functional.cross_entropy(class_preds, nsp_labels)
+        # Computing cross-entropy loss
+        preds, labels = out[:, :-1], ids[:, 1:]
+        ce_loss = self.cross_entropy(preds.view(-1, self.vocab_size), labels.view(-1))
 
-        # Masked language modeling loss
-        mlm_loss = torch.nn.functional.cross_entropy(mlm_preds, mlm_labels)
+        accuracy = (preds.argmax(dim=-1) == labels).float().mean()
+        perplexity = torch.exp(ce_loss)
 
-        # Getting accuracies
-        class_acc = (class_preds.argmax(dim=-1) == nsp_labels).float().mean()
-        mlm_acc = (mlm_preds.argmax(dim=-1) == mlm_labels).float().mean()
-
-        return class_loss, mlm_loss, class_acc, mlm_acc
+        return ce_loss, accuracy, perplexity
 
     def configure_optimizers(self):
         optim = AdamW(
@@ -134,7 +104,6 @@ class Bert(pl.LightningModule):
         )
 
         self.linear_scheduler = LambdaLR(optim, self.scheduler_fn)
-
         return {"optimizer": optim}
 
     def scheduler_fn(self, step):
@@ -155,64 +124,51 @@ class Bert(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         # Getting losses & accuracies
-        class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
-
-        # Total loss
-        loss = class_loss + mlm_loss
+        ce_loss, accuracy, perplexity = self.get_losses(batch)
 
         # Logging
         self.log_dict(
             {
                 "lr": self.optimizers().param_groups[0]["lr"],
-                "train_loss": loss,
-                "train_class_loss": class_loss,
-                "train_mlm_loss": mlm_loss,
-                "train_class_acc": c_acc,
-                "train_mlm_acc": m_acc,
+                "train_loss": ce_loss,
+                "train_acc": accuracy,
+                "train_ppl": perplexity,
             },
             sync_dist=True,
         )
 
-        return loss
+        return ce_loss
 
     def validation_step(self, batch, batch_idx):
         # Getting losses & accuracies
-        class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
-
-        # Total loss
-        loss = class_loss + mlm_loss
+        ce_loss, accuracy, perplexity = self.get_losses(batch)
 
         # Logging
         self.log_dict(
             {
-                "val_loss": loss,
-                "val_class_loss": class_loss,
-                "val_mlm_loss": mlm_loss,
-                "val_class_acc": c_acc,
-                "val_mlm_acc": m_acc,
+                "lr": self.optimizers().param_groups[0]["lr"],
+                "val_loss": ce_loss,
+                "val_acc": accuracy,
+                "val_ppl": perplexity,
             },
             sync_dist=True,
         )
 
-        return loss
+        return ce_loss
 
     def test_step(self, batch, batch_idx):
         # Getting losses & accuracies
-        class_loss, mlm_loss, c_acc, m_acc = self.get_losses(batch)
-
-        # Total loss
-        loss = class_loss + mlm_loss
+        ce_loss, accuracy, perplexity = self.get_losses(batch)
 
         # Logging
         self.log_dict(
             {
-                "test_loss": loss,
-                "test_class_loss": class_loss,
-                "test_mlm_loss": mlm_loss,
-                "test_class_acc": c_acc,
-                "test_mlm_acc": m_acc,
+                "lr": self.optimizers().param_groups[0]["lr"],
+                "test_loss": ce_loss,
+                "test_acc": accuracy,
+                "test_ppl": perplexity,
             },
             sync_dist=True,
         )
 
-        return loss
+        return ce_loss

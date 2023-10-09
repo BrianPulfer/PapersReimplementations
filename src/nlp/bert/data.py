@@ -105,7 +105,7 @@ class BertDataset(Dataset):
         return {
             "input_ids": input_ids,
             "segment_ids": segment_idx,
-            "attn_mask": attn_mask,
+            "attention_mask": attn_mask,
             "mlm_labels": mlm_labels,
             "mlm_idx": mlm_idx,
             "nsp_labels": nsp_label,
