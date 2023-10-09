@@ -69,7 +69,7 @@ def unmask_sentences(bert, tokenizer, max_length, file_path):
 
 def main(args):
     """
-    Train a BERT model on WikiText-2.
+    Train a BERT model on Wikipedia.
     Use the model to "unmask" sentences from a file.
     """
     # Unpacking parameters
