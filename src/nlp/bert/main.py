@@ -155,7 +155,7 @@ def main(args):
 
     # Testing the best model
     bert = Bert.load_from_checkpoint(os.path.join(save_dir, "best.ckpt"))
-    # trainer.test(bert, test_loader)
+    trainer.test(bert, test_loader)
 
     if file_path is not None and os.path.isfile(file_path):
         # Unmasking sentences
