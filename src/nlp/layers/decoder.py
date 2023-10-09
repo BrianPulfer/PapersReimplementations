@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 from src.nlp.layers.attention import MultiHeadAttention
@@ -72,6 +73,14 @@ class DecoderTransformer(nn.Module):
         )
 
     def forward(self, hidden, kv=None, self_attn_mask=None, cross_attn_mask=None):
+        # Creating causal mask if not provided
+        if self_attn_mask is None:
+            b, l, d = hidden.shape
+            self_attn_mask = torch.tril(torch.ones(l, l, device=hidden.device)).repeat(
+                b, 1, 1
+            )
+
+        # Running blocks
         for block in self.blocks:
             hidden = block(hidden, kv, self_attn_mask, cross_attn_mask)
 

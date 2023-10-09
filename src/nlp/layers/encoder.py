@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 from src.nlp.layers.attention import MultiHeadAttention
@@ -61,6 +62,12 @@ class EncoderTransformer(nn.Module):
         )
 
     def forward(self, hidden, attn_mask=None):
+        # Creating full attention mask if not provided
+        if attn_mask is None:
+            b, l, d = hidden.shape
+            attn_mask = torch.ones((l, l), device=hidden.device).repeat(b, 1, 1)
+
+        # Running blocks
         for block in self.blocks:
             hidden = block(hidden, attn_mask)
         return hidden
