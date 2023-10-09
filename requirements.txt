@@ -1,4 +1,5 @@
 accelerate
+apache_beam
 datasets
 deepspeed
 einops
@@ -6,6 +7,7 @@ gym
 gym[classic_control]
 imageio
 matplotlib
+mwparserfromhell
 numpy
 pandas
 pillow
