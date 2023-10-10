@@ -98,9 +98,11 @@ def main(args):
     # test_set.set_format(type="torch", columns=["text"])
 
     # Loading the GPT2 tokenizer
+    added_pad_token = False
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens({"pad_token": "[PAD]"})
+        added_pad_token = True
 
     # Tokenizing the whole dataset
     def collate(batch):
@@ -137,7 +139,7 @@ def main(args):
     )
 
     # Initialize the model
-    vocab_size = tokenizer.vocab_size
+    vocab_size = tokenizer.vocab_size + 1 if added_pad_token else tokenizer.vocab_size
     gpt = GPT(
         vocab_size,
         max_len,
@@ -187,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_len", type=int, default=128)
 
     # Training parameters
-    parser.add_argument("--batch_size", type=int, default=32)
+    parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--max_train_steps", type=int, default=10_000)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=0.01)
