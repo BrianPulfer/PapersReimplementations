@@ -87,20 +87,20 @@ def main(args):
     # Setting random seed
     pl.seed_everything(seed)
 
-    # Loading the GPT2 tokenizer
-    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    if tokenizer.pad_token is None:
-        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
-
     # Load the dataset (wikipedia only has 'train', so we split it ourselves)
     train_set = load_dataset("wikipedia", "20220301.en", split="train[:80%]")
     val_set = load_dataset("wikipedia", "20220301.en", split="train[80%:90%]")
     test_set = load_dataset("wikipedia", "20220301.en", split="train[90%:]")
 
-    # Setting format to torch (possibly not necessary)
-    train_set.set_format(type="torch", columns=["text"])
-    val_set.set_format(type="torch", columns=["text"])
-    test_set.set_format(type="torch", columns=["text"])
+    # Setting format to torch (not striclty necessary)
+    # train_set.set_format(type="torch", columns=["text"])
+    # val_set.set_format(type="torch", columns=["text"])
+    # test_set.set_format(type="torch", columns=["text"])
+
+    # Loading the GPT2 tokenizer
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    if tokenizer.pad_token is None:
+        tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
     # Tokenizing the whole dataset
     def collate(batch):
@@ -196,6 +196,7 @@ if __name__ == "__main__":
 
     # Testing parameters
     parser.add_argument("--prompts", type=str, default="data/nlp/gpt/prompts.txt")
+
     # Seed
     parser.add_argument("--seed", type=int, default=0)
 

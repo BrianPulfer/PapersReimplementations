@@ -95,10 +95,10 @@ def main(args):
     val_set = load_dataset("wikipedia", "20220301.en", split="train[80%:90%]")
     test_set = load_dataset("wikipedia", "20220301.en", split="train[90%:]")
 
-    # Setting format to torch (possibly not necessary)
-    train_set.set_format(type="torch", columns=["text"])
-    val_set.set_format(type="torch", columns=["text"])
-    test_set.set_format(type="torch", columns=["text"])
+    # Setting format to torch (not striclty necessary)
+    # train_set.set_format(type="torch", columns=["text"])
+    # val_set.set_format(type="torch", columns=["text"])
+    # test_set.set_format(type="torch", columns=["text"])
 
     # Bert tokenizer
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
