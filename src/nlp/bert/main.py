@@ -91,7 +91,7 @@ def main(args):
     pl.seed_everything(seed)
 
     # Load the dataset (wikipedia only has 'train', so we split it ourselves)
-    train_set = load_dataset("wikipedia", "20220301.en", split="train[:70%]")
+    train_set = load_dataset("wikipedia", "20220301.en", split="train[:80%]")
     val_set = load_dataset("wikipedia", "20220301.en", split="train[80%:90%]")
     test_set = load_dataset("wikipedia", "20220301.en", split="train[90%:]")
 
