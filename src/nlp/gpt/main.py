@@ -189,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument("--max_len", type=int, default=128)
 
     # Training parameters
-    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--max_train_steps", type=int, default=10_000)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--weight_decay", type=float, default=0.01)
