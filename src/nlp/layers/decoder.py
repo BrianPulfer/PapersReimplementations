@@ -14,22 +14,24 @@ class DecoderBlock(nn.Module):
         mlp_out=None,
         mlp_activation=nn.GELU(),
         dropout_p=0.1,
+        with_xa=False,
     ):
         super(DecoderBlock, self).__init__()
+        self.with_xa = with_xa
 
         self.ln1 = nn.LayerNorm(hidden_dim)
-        self.ln2 = nn.LayerNorm(hidden_dim)
-        self.ln3 = nn.LayerNorm(hidden_dim)
-
         self.sa_qkv = nn.Linear(hidden_dim, 3 * hidden_dim)
+        self.mhsa = MultiHeadAttention(n_heads, dropout_p)
         self.sa_o = nn.Linear(hidden_dim, hidden_dim)
 
-        self.xa_q = nn.Linear(hidden_dim, hidden_dim)
-        self.xa_kv = nn.Linear(hidden_dim, 2 * hidden_dim)
-        self.xa_o = nn.Linear(hidden_dim, hidden_dim)
+        if with_xa:
+            self.ln2 = nn.LayerNorm(hidden_dim)
+            self.xa_q = nn.Linear(hidden_dim, hidden_dim)
+            self.xa_kv = nn.Linear(hidden_dim, 2 * hidden_dim)
+            self.mhxa = MultiHeadAttention(n_heads, dropout_p)
+            self.xa_o = nn.Linear(hidden_dim, hidden_dim)
 
-        self.mhsa = MultiHeadAttention(n_heads, dropout_p)
-        self.mhxa = MultiHeadAttention(n_heads, dropout_p)
+        self.ln3 = nn.LayerNorm(hidden_dim)
         self.mlp = MLP(hidden_dim, mlp_hidden, mlp_out, mlp_activation, dropout_p)
 
     def forward(self, x, kv=None, self_attn_mask=None, cross_attn_mask=None):
@@ -39,7 +41,7 @@ class DecoderBlock(nn.Module):
         x = x + sa_out
 
         # Cross-attention and residual part
-        if kv is not None:
+        if self.with_xa and kv is not None:
             q = self.xa_q(self.ln2(x))
             k, v = self.xa_kv(kv)
             xa_out = self.xa_o(self.mhxa(q, k, v, cross_attn_mask))
@@ -60,13 +62,20 @@ class DecoderTransformer(nn.Module):
         mlp_out=None,
         mlp_activation=nn.GELU(),
         dropout_p=0.1,
+        with_xa=False,
     ):
         super(DecoderTransformer, self).__init__()
 
         self.blocks = nn.ModuleList(
             [
                 DecoderBlock(
-                    hidden_dim, n_heads, mlp_hidden, mlp_out, mlp_activation, dropout_p
+                    hidden_dim,
+                    n_heads,
+                    mlp_hidden,
+                    mlp_out,
+                    mlp_activation,
+                    dropout_p,
+                    with_xa,
                 )
                 for _ in range(depth)
             ]
