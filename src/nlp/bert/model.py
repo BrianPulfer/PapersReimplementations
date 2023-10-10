@@ -53,12 +53,8 @@ class Bert(pl.LightningModule):
 
         # Embeddings
         self.embeddings = nn.Embedding(vocab_size, hidden_dim)
-        self.pos_embeddings = nn.Parameter(
-            torch.randn(max_len, hidden_dim) / hidden_dim**0.5
-        )
-        self.sentence_embeddings = nn.Parameter(
-            torch.randn(2, hidden_dim) / hidden_dim**0.5
-        )
+        self.pos_embeddings = nn.Embedding(max_len, hidden_dim)
+        self.sentence_embeddings = nn.Embedding(2, hidden_dim)
 
         # Transformer and output layer
         self.transformer = EncoderTransformer(
@@ -82,12 +78,16 @@ class Bert(pl.LightningModule):
         # Embedding
         b, t = ids.shape
         hidden = self.embeddings(ids)
-        hidden += self.pos_embeddings[:t].repeat(b, 1, 1)
+        hidden += self.pos_embeddings(torch.arange(t, device=ids.device)).repeat(
+            b, 1, 1
+        )
 
         if segment_ids is not None:
-            hidden += self.sentence_embeddings[segment_ids]
+            hidden += self.sentence_embeddings(segment_ids)
         else:
-            hidden += self.sentence_embeddings[0]
+            hidden += self.sentence_embeddings(
+                torch.zeros(1, dtype=torch.long, device=ids.device)
+            ).repeat(b, 1, 1)
 
         # Transformer
         hidden = self.transformer(hidden, attn_mask=attn_mask)

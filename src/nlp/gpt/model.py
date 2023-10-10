@@ -42,7 +42,6 @@ class GPT(pl.LightningModule):
         self.depth = depth
         self.dropout = dropout
         self.train_config = GPT.DEFAULT_GPT_CONFIG
-        self.cross_entropy = nn.CrossEntropyLoss()
 
         # Schedulers
         self.linear_scheduler = None
@@ -54,9 +53,7 @@ class GPT(pl.LightningModule):
 
         # Embeddings
         self.embeddings = nn.Embedding(vocab_size, hidden_dim)
-        self.pos_embeddings = nn.Parameter(
-            torch.randn(max_len, hidden_dim) / hidden_dim**0.5
-        )
+        self.pos_embeddings = nn.Embedding(max_len, hidden_dim)
 
         # Transformer and output layer
         self.transformer = DecoderTransformer(
@@ -64,19 +61,23 @@ class GPT(pl.LightningModule):
         )
 
         # Next token classifier
-        self.classifier = nn.LayerNorm(hidden_dim)
+        self.classifier = nn.Sequential(
+            nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, vocab_size)
+        )
 
     def forward(self, ids, attn_mask=None):
         # Embedding
         b, t = ids.shape
         hidden = self.embeddings(ids)
-        hidden += self.pos_embeddings[:t].repeat(b, 1, 1)
+        hidden += self.pos_embeddings(torch.arange(t, device=ids.device)).repeat(
+            b, 1, 1
+        )
 
         # Transformer
         hidden = self.transformer(hidden, self_attn_mask=attn_mask)
 
         # Classification
-        return self.classifier(hidden)
+        return self.classifier(hidden), hidden
 
     def get_losses(self, batch):
         # Unpacking batch
@@ -84,11 +85,13 @@ class GPT(pl.LightningModule):
         attn_mask = batch["attention_mask"]
 
         # Running forward
-        out = self(ids, attn_mask)
+        out, _ = self(ids, attn_mask)
 
         # Computing cross-entropy loss
         preds, labels = out[:, :-1], ids[:, 1:]
-        ce_loss = self.cross_entropy(preds.view(-1, self.vocab_size), labels.view(-1))
+        ce_loss = nn.functional.cross_entropy(
+            preds.reshape(-1, self.vocab_size), labels.reshape(-1)
+        )
 
         accuracy = (preds.argmax(dim=-1) == labels).float().mean()
         perplexity = torch.exp(ce_loss)
