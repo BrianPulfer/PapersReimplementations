@@ -41,18 +41,6 @@
             "justMyCode": true
         },
         {
-            "name": "gpt",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/gpt/gpt.py",
-            "console": "integratedTerminal",
-            "env": {"PYTHONPATH": "${workspaceFolder}"},
-            "args": [
-                "--file", "${workspaceFolder}/data/nlp/1984_George_Orwell.txt"
-            ],
-            "justMyCode": true
-        },
-        {
             "name": "lm compression",
             "type": "python",
             "request": "launch",
@@ -71,7 +59,19 @@
             "args": [
                 "--max_train_steps", "800",
                 "--warmup_steps", "30",
-                //"--test_file", "${workspaceFolder}/src/nlp/bert/masked_sentences.txt",
+            ],
+            "justMyCode": true
+        },
+        {
+            "name": "nlp - gpt",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/nlp/gpt/main.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "args": [
+                "--max_train_steps", "800",
+                "--warmup_steps", "30"
             ],
             "justMyCode": true
         },
