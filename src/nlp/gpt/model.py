@@ -175,3 +175,20 @@ class GPT(pl.LightningModule):
         )
 
         return ce_loss
+
+    def generate(self, input_ids, max_len):
+        # Predicting next token until max_len
+        remaining = max_len - len(input_ids)
+        for _ in range(remaining):
+            # Running GPT
+            preds = self(input_ids)
+
+            # Getting probability of next token
+            probs = preds[:, -1, :]
+
+            # Sampling next token with multinomial sampling
+            next_token = torch.multinomial(probs, num_samples=1).unsqueeze(0)
+
+            # Adding token to input_ids
+            input_ids = torch.cat((input_ids, next_token), dim=-1)
+        return input_ids

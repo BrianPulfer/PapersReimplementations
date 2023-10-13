@@ -43,20 +43,8 @@ def continue_sentences(gpt, tokenizer, max_len, file_path):
             max_length=max_len,
         )["input_ids"].cuda()
 
-        # Predicting next token until max_len
-        remaining = max_len - len(input_ids)
-        for _ in range(remaining):
-            # Running GPT
-            preds = gpt(input_ids)
-
-            # Getting probability of next token
-            probs = preds[:, -1, :]
-
-            # Sampling next token with multinomial sampling
-            next_token = torch.multinomial(probs, num_samples=1).unsqueeze(0)
-
-            # Adding token to input_ids
-            input_ids = torch.cat((input_ids, next_token), dim=-1)
+        # Generating sentence
+        all_ids = gpt.generate(input_ids, max_len)
 
         # Decoding the sentence
         sentence = tokenizer.decode(input_ids.squeeze().tolist())
