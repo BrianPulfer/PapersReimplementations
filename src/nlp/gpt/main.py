@@ -191,4 +191,5 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=0)
 
     args = vars(parser.parse_args())
+    print(args)
     main(args)
