@@ -14,7 +14,7 @@
             "name": "ddpm",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/ddpm/ddpm.py",
+            "program": "${workspaceFolder}/src/cv/ddpm/ddpm.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
@@ -41,7 +41,7 @@
             "name": "lm compression",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/lm_is_compression/lm_is_compression.py",
+            "program": "${workspaceFolder}/src/nlp/lm_is_compression/lm_is_compression.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
@@ -86,7 +86,7 @@
             "name": "ppo",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/ppo/ppo.py",
+            "program": "${workspaceFolder}/src/rl/ppo/ppo.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
@@ -95,7 +95,7 @@
             "name": "vit",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/vit/vit_torch.py",
+            "program": "${workspaceFolder}/src/cv/vit/vit_torch.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
