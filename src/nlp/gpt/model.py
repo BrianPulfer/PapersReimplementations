@@ -8,6 +8,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 
 from src.nlp.layers.decoder import DecoderTransformer
+from src.nlp.layers.embeddings import get_learnable_embedding
 
 
 class GPT(pl.LightningModule):
@@ -52,8 +53,12 @@ class GPT(pl.LightningModule):
             self.train_config.update(train_config)
 
         # Embeddings
-        self.embeddings = nn.Embedding(vocab_size, hidden_dim)
-        self.pos_embeddings = nn.Embedding(max_len, hidden_dim)
+        self.embeddings = get_learnable_embedding(
+            vocab_size, hidden_dim
+        )  # nn.Embedding(vocab_size, hidden_dim)
+        self.pos_embeddings = get_learnable_embedding(
+            max_len, hidden_dim
+        )  # nn.Embedding(max_len, hidden_dim)
 
         # Transformer and output layer
         self.transformer = DecoderTransformer(

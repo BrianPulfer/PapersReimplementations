@@ -7,6 +7,7 @@ from pytorch_lightning.utilities.types import STEP_OUTPUT
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 
+from src.nlp.layers.embeddings import get_learnable_embedding
 from src.nlp.layers.encoder import EncoderTransformer
 
 
@@ -52,9 +53,15 @@ class Bert(pl.LightningModule):
             self.train_config.update(train_config)
 
         # Embeddings
-        self.embeddings = nn.Embedding(vocab_size, hidden_dim)
-        self.pos_embeddings = nn.Embedding(max_len, hidden_dim)
-        self.sentence_embeddings = nn.Embedding(2, hidden_dim)
+        self.embeddings = get_learnable_embedding(
+            vocab_size, hidden_dim
+        )  # nn.Embedding(vocab_size, hidden_dim)
+        self.pos_embeddings = get_learnable_embedding(
+            max_len, hidden_dim
+        )  # nn.Embedding(max_len, hidden_dim)
+        self.sentence_embeddings = get_learnable_embedding(
+            2, hidden_dim
+        )  # nn.Embedding(2, hidden_dim)
 
         # Transformer and output layer
         self.transformer = EncoderTransformer(
