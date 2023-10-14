@@ -1,7 +1,4 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
@@ -71,7 +68,8 @@
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "args": [
                 "--max_train_steps", "800",
-                "--warmup_steps", "30"
+                "--warmup_steps", "8",
+                "--batch_size", "16",
             ],
             "justMyCode": true
         },
