@@ -5,7 +5,7 @@ Re-implementation of
                                     Devlin et al. (2018)
                         (https://arxiv.org/pdf/1810.04805.pdf)
 
-on the WikiText-2 dataset.
+on the WikiPedia dataset.
 """
 
 import os

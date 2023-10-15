@@ -1,11 +1,11 @@
 """
 Re-implementation of
 
-                            Attention is all you need
-                              Vaswani et al. (2017)
-                        (https://arxiv.org/abs/1706.03762)
+                      Language Models are Few-Shot Learners
+                              Brown et al. (2020)
+                        (https://arxiv.org/abs/2005.14165)
 
-on the WikiText-2 dataset.
+on the WikiPedia dataset.
 """
 
 import os
