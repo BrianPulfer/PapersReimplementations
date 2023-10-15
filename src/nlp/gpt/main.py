@@ -35,6 +35,7 @@ def continue_sentences(gpt, tokenizer, max_len, file_path):
     lines = [line if not line.endswith("\n") else line[:-1] for line in lines]
     file.close()
 
+    gpt = gpt.cuda()
     for i, line in enumerate(lines):
         # Preparing input
         input_ids = tokenizer(
@@ -47,7 +48,7 @@ def continue_sentences(gpt, tokenizer, max_len, file_path):
         all_ids = gpt.generate(input_ids, max_len)
 
         # Decoding the sentence
-        sentence = tokenizer.decode(input_ids.squeeze().tolist())
+        sentence = tokenizer.decode(all_ids.squeeze().tolist())
         print(f"\n\nSentence {i+1}:")
         print(f"\tOriginal: {line}\n\tCompleted: {sentence}")
 
