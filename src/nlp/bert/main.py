@@ -29,6 +29,7 @@ from src.nlp.bert.data import BertDataset
 from src.nlp.bert.model import Bert
 
 
+@torch.no_grad()
 def unmask_sentences(bert, tokenizer, max_length, file_path):
     """Uses the bert model to unmask sentences from a file. Prints the unmaksed sentences."""
     file = open(file_path, "r")
@@ -36,6 +37,7 @@ def unmask_sentences(bert, tokenizer, max_length, file_path):
     lines = [line if not line.endswith("\n") else line[:-1] for line in lines]
     file.close()
 
+    bert = bert.cuda()
     for i, line in enumerate(lines):
         # Preparing input
         input_ids = tokenizer(
