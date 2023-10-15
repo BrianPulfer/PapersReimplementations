@@ -54,7 +54,7 @@
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "args": [
-                "--max_train_steps", "800",
+                "--max_train_steps", "80",
                 "--warmup_steps", "30",
             ],
             "justMyCode": true
@@ -67,9 +67,23 @@
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "args": [
-                "--max_train_steps", "800",
+                "--max_train_steps", "80",
                 "--warmup_steps", "8",
                 "--batch_size", "16",
+            ],
+            "justMyCode": true
+        },
+        {
+            "name": "nlp - original",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/nlp/original/main.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "args": [
+                "--max_train_steps", "80",
+                "--warmup_steps", "8",
+                "--batch_size", "4",
             ],
             "justMyCode": true
         },
