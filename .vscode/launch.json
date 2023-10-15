@@ -77,7 +77,7 @@
             "name": "normalizing flows",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/nf/normalizing_flows.py",
+            "program": "${workspaceFolder}/src/cv/nf/normalizing_flows.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
