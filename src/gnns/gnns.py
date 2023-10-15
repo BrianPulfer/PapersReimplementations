@@ -1,6 +1,6 @@
 """Implementation of convolutional, attentional and message-passing GNNs, inspired by the paper
     Everything is Connected: Graph Neural Networks
-(https://arxiv.org/pdf/2301.08210v1.pdf)
+(https://arxiv.org/abs/2301.08210)
 
 Useful links:
  - Petar Veličković PDF talk: https://petar-v.com/talks/GNN-EEML.pdf
@@ -11,12 +11,13 @@ from argparse import ArgumentParser
 
 import torch
 import torch.nn as nn
-import wandb
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, Lambda, Resize, ToTensor
 from tqdm import tqdm
+
+import wandb
 
 # Definitions
 NETWORK_TYPES = ["attn", "conv"]

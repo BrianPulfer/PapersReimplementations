@@ -11,10 +11,11 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
-import wandb
 from torch.distributions.categorical import Categorical
 from torch.optim import Adam
 from torch.optim.lr_scheduler import LinearLR
+
+import wandb
 
 # Definitions
 MODEL_PATH = "model.pt"

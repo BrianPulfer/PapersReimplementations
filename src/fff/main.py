@@ -12,7 +12,7 @@ from torchmetrics import Accuracy
 from torchvision.datasets import MNIST
 from torchvision.transforms import Compose, ToTensor
 
-from fff import FFFLayer
+from src.fff.fff import FFFLayer
 
 
 class FlattenMNIST:
