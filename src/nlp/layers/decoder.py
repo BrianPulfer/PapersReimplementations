@@ -43,7 +43,7 @@ class DecoderBlock(nn.Module):
         # Cross-attention and residual part
         if self.with_xa and kv is not None:
             q = self.xa_q(self.ln2(x))
-            k, v = self.xa_kv(kv)
+            k, v = self.xa_kv(kv).chunk(2, -1)
             xa_out = self.xa_o(self.mhxa(q, k, v, cross_attn_mask))
             x = x + xa_out
 
