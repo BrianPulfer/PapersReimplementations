@@ -12,13 +12,26 @@ class Attention(nn.Module):
 
     def forward(self, q, k, v, mask=None):
         # Comput the attention scores by computing the dot product of queries with keys
-        d = q.shape[-1]
+        b, t, d = q.shape
         attn = q @ k.transpose(-2, -1) / (d**0.5)  # b, nq, nk
 
         # Mask interactions that should not be captured
         if mask is not None:
+            if mask.ndim == 1:
+                new_mask = torch.ones_like(attn)
+                new_mask[:, :, mask == 0] = 0
+                mask = new_mask
+
             if mask.ndim == 2:
-                mask = mask.unsqueeze(1)
+                if mask.shape == (b, t):
+                    mask = mask.repeat(1, t).reshape(b, t, t)
+                elif mask.shape == (t, t):
+                    mask = mask.repeat(b, 1, 1)
+                else:
+                    raise KeyError(
+                        "Provided mask shape is two dimensional but doesn't match sequence length or batch size"
+                    )
+
             attn = attn.masked_fill(mask == 0, float("-inf"))
 
         # Computing final output by multiplying attention scores with values
