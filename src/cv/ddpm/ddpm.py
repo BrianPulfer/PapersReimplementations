@@ -15,7 +15,7 @@ from torchvision.transforms import Compose, Lambda, ToTensor
 from tqdm.auto import tqdm
 
 # Import of custom models
-from src.ddpm.models import MyDDPM, MyUNet
+from src.cv.ddpm.models import MyDDPM, MyUNet
 
 # Setting reproducibility
 SEED = 0

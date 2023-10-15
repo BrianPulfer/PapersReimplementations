@@ -3,7 +3,7 @@ Re-implementation of
 
     BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding
                                     Devlin et al. (2018)
-                        (https://arxiv.org/pdf/1810.04805.pdf)
+                            (https://arxiv.org/abs/1810.04805)
 
 on the WikiPedia dataset.
 """

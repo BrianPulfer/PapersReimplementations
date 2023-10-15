@@ -1,6 +1,6 @@
 """Implementation of convolutional, attentional and message-passing GNNs, inspired by the paper
     Everything is Connected: Graph Neural Networks
-(https://arxiv.org/pdf/2301.08210v1.pdf)
+(https://arxiv.org/abs/2301.08210)
 
 Useful links:
  - Petar Veličković PDF talk: https://petar-v.com/talks/GNN-EEML.pdf
