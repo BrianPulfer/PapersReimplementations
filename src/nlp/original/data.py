@@ -1,3 +1,5 @@
+from os import cpu_count
+
 import torch
 from datasets import load_dataset
 from pytorch_lightning import LightningDataModule
@@ -78,13 +80,25 @@ class WMT14Dataset(LightningDataModule):
         )
 
     def train_dataloader(self):
-        return DataLoader(self.train, batch_size=self.batch_size, shuffle=True)
+        return DataLoader(
+            self.train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=cpu_count(),
+        )
 
     def val_dataloader(self):
-        return DataLoader(self.val, batch_size=self.batch_size, shuffle=False)
+        return DataLoader(
+            self.val, batch_size=self.batch_size, shuffle=False, num_workers=cpu_count()
+        )
 
     def test_dataloader(self):
-        return DataLoader(self.test, batch_size=self.batch_size, shuffle=False)
+        return DataLoader(
+            self.test,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=cpu_count(),
+        )
 
     def teardown(self, stage):
         pass
