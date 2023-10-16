@@ -77,9 +77,9 @@ def main(args):
     pl.seed_everything(seed)
 
     # Load the dataset (wikipedia only has 'train', so we split it ourselves)
-    train_set = load_dataset("wikipedia", "20220301.en", split="train[:80%]")
-    val_set = load_dataset("wikipedia", "20220301.en", split="train[80%:90%]")
-    test_set = load_dataset("wikipedia", "20220301.en", split="train[90%:]")
+    train_set = load_dataset("wikipedia", "20220301.en", split="train[:98%]")
+    val_set = load_dataset("wikipedia", "20220301.en", split="train[98%:99%]")
+    test_set = load_dataset("wikipedia", "20220301.en", split="train[99%:]")
 
     # Setting format to torch (not striclty necessary)
     # train_set.set_format(type="torch", columns=["text"])
@@ -145,9 +145,10 @@ def main(args):
     )
 
     # Training
+    checkpointing_freq = max_train_steps // 10
     wandb_logger = WandbLogger(project="Papers Re-implementations", name="GPT")
     wandb_logger.experiment.config.update(args)
-    callbacks = [ModelCheckpoint(save_dir, monitor="val_loss", filename="best")]
+    callbacks = [ModelCheckpoint(save_dir, monitor="val_loss", filename="best", every_n_train_steps=checkpointing_freq)]
     trainer = pl.Trainer(
         accelerator="auto",
         strategy="ddp",  # State dict not saved with fsdp for some reason
@@ -155,6 +156,7 @@ def main(args):
         logger=wandb_logger,
         callbacks=callbacks,
         profiler="simple",
+        val_check_interval=checkpointing_freq
     )
     trainer.fit(gpt, train_loader, val_loader)
 

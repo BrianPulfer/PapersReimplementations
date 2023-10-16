@@ -89,7 +89,8 @@ def main(args):
     )
 
     # Training
-    callbacks = [ModelCheckpoint(save_dir, monitor="val_loss", filename="best")]
+    checkpointing_freq = max_train_steps // 10
+    callbacks = [ModelCheckpoint(save_dir, monitor="val_loss", filename="best", every_n_train_steps=checkpointing_freq)]
     logger = WandbLogger(project="Papers Re-implementations", name="ORIGINAL")
     logger.experiment.config.update(args)
     trainer = pl.Trainer(
@@ -98,15 +99,15 @@ def main(args):
         max_steps=max_train_steps,
         callbacks=callbacks,
         logger=logger,
+        val_check_interval=checkpointing_freq
     )
     trainer.fit(model, datamodule=dataset)
-    trainer.save_checkpoint(os.path.join(save_dir, "best.ckpt"))  # TODO DELETE
 
     # Testing
     model = EncoderDecoderModel.load_from_checkpoint(
         os.path.join(save_dir, "best.ckpt")
     )
-    # trainer.test(model, datamodule=dataset) # TODO ENABLE
+    trainer.test(model, datamodule=dataset)
 
     # Translating custom sentences
     translate_sentences(file_path, model, tokenizer, max_len)
