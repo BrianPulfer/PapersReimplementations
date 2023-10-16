@@ -91,6 +91,7 @@ def main(args):
     # Training
     callbacks = [ModelCheckpoint(save_dir, monitor="val_loss", filename="best")]
     logger = WandbLogger(project="Papers Re-implementations", name="ORIGINAL")
+    logger.experiment.config.update(args)
     trainer = pl.Trainer(
         devices="auto",
         strategy="ddp",
