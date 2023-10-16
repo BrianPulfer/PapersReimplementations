@@ -118,7 +118,8 @@ class Bert(pl.LightningModule):
 
         # Running forward
         _, class_preds, mlm_preds = self(ids, segment_ids, attn_mask)
-        mlm_preds, mlm_labels = mlm_preds[mlm_idx == 1], mlm_labels[mlm_idx == 1]
+        mlm_preds = mlm_preds[mlm_idx + attn_mask == 2]
+        mlm_labels = mlm_labels[mlm_idx + attn_mask == 2]
 
         # Classification loss
         class_loss = torch.nn.functional.cross_entropy(class_preds, nsp_labels)
