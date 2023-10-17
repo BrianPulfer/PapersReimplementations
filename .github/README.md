@@ -7,6 +7,7 @@ Current re-implementations include:
 | Paper | Code | Blog |
 | ----------- | ----------- | ----------- |
 | <b>Natural language processing</b> |
+|[A Watermark for Large Language Models](https://arxiv.org/abs/2301.10226v2)|[Code](/src/nlp/lm_watermarking/)|
 | [Attention is all you need](https://arxiv.org/abs/1706.03762) | [Code](/src/nlp/original/) | *Coming soon*
 | [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) | [Code](/src/nlp/bert/) | *Coming soon*
 | [Language Modeling Is Compression](https://arxiv.org/abs/2309.10668) | [Code](/src/nlp/lm_is_compression/) |
