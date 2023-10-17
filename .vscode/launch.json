@@ -88,6 +88,15 @@
             "justMyCode": true
         },
         {
+            "name": "nlp - watermark",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/nlp/lm_watermarking/main.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
             "name": "normalizing flows",
             "type": "python",
             "request": "launch",
