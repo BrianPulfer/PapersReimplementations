@@ -94,6 +94,7 @@ class GPT(pl.LightningModule):
 
         # Computing cross-entropy loss
         preds, labels = out[:, :-1], ids[:, 1:]
+        preds, labels = preds[attn_mask[:, :-1] == 1], labels[attn_mask[:, :-1] == 1]
         ce_loss = nn.functional.cross_entropy(
             preds.reshape(-1, self.vocab_size), labels.reshape(-1)
         )
