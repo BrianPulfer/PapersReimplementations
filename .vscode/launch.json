@@ -115,6 +115,15 @@
             "justMyCode": true
         },
         {
+            "name": "vir",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/cv/vir/train.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
             "name": "vit",
             "type": "python",
             "request": "launch",

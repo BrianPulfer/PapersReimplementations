@@ -16,6 +16,7 @@ Current re-implementations include:
 |[An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale](https://arxiv.org/abs/2010.11929)| [Code](/src/cv/vit/) | [Blog](https://www.brianpulfer.ch/blog/vit)
 |[Denoising Diffusion Probabilistic Models](https://arxiv.org/abs/2006.11239) | [Code](/src/cv/ddpm/) | [Blog](https://www.brianpulfer.ch/blog/ddpm)
 | [Density estimation using Real NVP](https://arxiv.org/abs/1605.08803)| [Code](/src/cv/nf/) |
+|[ViR: Vision Retention Networks](https://arxiv.org/abs/2310.19731)|[Code](/src/cv/vir/)| *Coming soon*
 | <b>Others</b> |
 |[Everything is Connected: Graph Neural Networks](https://arxiv.org/abs/2301.08210)| [Code](/src/gnns/) |
 |[Fast Feedforward Networks](https://arxiv.org/abs/2308.14711)| [Code](/src/fff/) |
