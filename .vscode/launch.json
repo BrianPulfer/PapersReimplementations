@@ -109,7 +109,7 @@
             "name": "ppo",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/src/ppo/ppo.py",
+            "program": "${workspaceFolder}/src/rl/ppo/ppo.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
