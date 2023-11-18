@@ -17,21 +17,9 @@ class Attention(nn.Module):
 
         # Mask interactions that should not be captured
         if mask is not None:
-            if mask.ndim == 1:
-                new_mask = torch.ones_like(attn)
-                new_mask[:, :, mask == 0] = 0
-                mask = new_mask
-
-            if mask.ndim == 2:
-                if mask.shape == (b, t):
-                    mask = mask.repeat(1, t).reshape(b, t, t)
-                elif mask.shape == (t, t):
-                    mask = mask.repeat(b, 1, 1)
-                else:
-                    raise KeyError(
-                        "Provided mask shape is two dimensional but doesn't match sequence length or batch size"
-                    )
-
+            assert (
+                mask.shape == attn.shape
+            ), f"Mask has shape {mask.shape} != {attn.shape}"
             attn = attn.masked_fill(mask == 0, float("-inf"))
 
         # Computing final output by multiplying attention scores with values

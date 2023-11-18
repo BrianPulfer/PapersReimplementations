@@ -119,11 +119,19 @@ class EncoderDecoderModel(pl.LightningModule):
         dec_attn_mask = batch["dec_attn_mask"]
         enc_dec_attn_mask = batch["enc_dec_attn_mask"]
 
+        b, te = ids_enc.shape
+        td = ids_dec.shape[1]
+
         y_pred, _, _ = self(
-            ids_enc, ids_dec, enc_attn_mask, dec_attn_mask, enc_dec_attn_mask
+            ids_enc,
+            ids_dec,
+            enc_attn_mask.repeat(1, te).reshape(b, te, te),
+            dec_attn_mask.repeat(1, td).reshape(b, td, td).tril(),
+            enc_dec_attn_mask.repeat(1, td).reshape(b, td, td),
         )
-        y_pred = y_pred[:, :-1, :]
-        y = ids_dec[:, 1:]
+
+        y_pred = y_pred[dec_attn_mask == 1][:-1]
+        y = ids_dec[dec_attn_mask == 1][1:]
 
         loss = nn.functional.cross_entropy(
             y_pred.reshape(-1, self.vocab_size), y.reshape(-1)

@@ -45,8 +45,7 @@ class WMT14Subset(Dataset):
         x_enc = enc_tok["input_ids"][0]
         x_dec = dec_tok["input_ids"][0]
         enc_attn_mask = enc_tok["attention_mask"][0]
-        dec_attn_mask = torch.tril(torch.ones(self.max_len, self.max_len))
-        dec_attn_mask[:, x_dec == self.tokenizer.pad_token_id] = 0
+        dec_attn_mask = dec_tok["attention_mask"][0]
 
         return {
             "x_enc": x_enc,

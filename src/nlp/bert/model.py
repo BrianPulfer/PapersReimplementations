@@ -117,7 +117,10 @@ class Bert(pl.LightningModule):
         nsp_labels = batch["nsp_labels"]
 
         # Running forward
-        _, class_preds, mlm_preds = self(ids, segment_ids, attn_mask)
+        b, t = ids.shape
+        _, class_preds, mlm_preds = self(
+            ids, segment_ids, attn_mask.repeat(1, t).reshape(b, t, t)
+        )
         mlm_preds = mlm_preds[mlm_idx + attn_mask == 2]
         mlm_labels = mlm_labels[mlm_idx + attn_mask == 2]
 

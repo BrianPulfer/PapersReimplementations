@@ -70,16 +70,13 @@ class GPT(pl.LightningModule):
             nn.LayerNorm(hidden_dim), nn.Linear(hidden_dim, vocab_size)
         )
 
-    def forward(self, ids):
+    def forward(self, ids, attn_mask=None):
         # Embedding
         b, t = ids.shape
         hidden = self.embeddings(ids)
         hidden += self.pos_embeddings(torch.arange(t, device=ids.device)).repeat(
             b, 1, 1
         )
-
-        # Causal masking
-        attn_mask = torch.tril(torch.ones(t, t)).repeat(b, 1, 1).to(ids.device)
 
         # Transformer
         hidden = self.transformer(hidden, self_attn_mask=attn_mask)
@@ -93,7 +90,8 @@ class GPT(pl.LightningModule):
         attn_mask = batch["attention_mask"]
 
         # Running forward
-        out, _ = self(ids)
+        b, t = ids.shape
+        out, _ = self(ids, attn_mask.repeat(1, t).reshape(b, t, t).tril())
 
         # Computing cross-entropy loss
         preds, labels = out[:, :-1], ids[:, 1:]
