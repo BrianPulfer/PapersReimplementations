@@ -14,7 +14,7 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
-from transformers import AutoTokenizer
+from transformers import FSMTTokenizer
 
 from src.nlp.original.data import WMT14Dataset
 from src.nlp.original.model import EncoderDecoderModel
@@ -65,7 +65,7 @@ def main(args):
     pl.seed_everything(seed)
 
     # Loading dataset
-    tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    tokenizer = FSMTTokenizer.from_pretrained("facebook/wmt19-de-en")
     vocab_size = tokenizer.vocab_size
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
@@ -90,7 +90,14 @@ def main(args):
 
     # Training
     checkpointing_freq = max_train_steps // 10
-    callbacks = [ModelCheckpoint(save_dir, monitor="val_loss", filename="best", every_n_train_steps=checkpointing_freq)]
+    callbacks = [
+        ModelCheckpoint(
+            save_dir,
+            monitor="val_loss",
+            filename="best",
+            every_n_train_steps=checkpointing_freq,
+        )
+    ]
     logger = WandbLogger(project="Papers Re-implementations", name="ORIGINAL")
     logger.experiment.config.update(args)
     trainer = pl.Trainer(
@@ -99,7 +106,7 @@ def main(args):
         max_steps=max_train_steps,
         callbacks=callbacks,
         logger=logger,
-        val_check_interval=checkpointing_freq
+        val_check_interval=checkpointing_freq,
     )
     trainer.fit(model, datamodule=dataset)
 
