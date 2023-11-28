@@ -11,10 +11,46 @@
             "justMyCode": false
         },
         {
-            "name": "ddpm",
+            "name": "cv - ddpm",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/src/cv/ddpm/ddpm.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "cv - ign",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/cv/ign/main.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "cv - normalizing flows",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/cv/nf/normalizing_flows.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "cv - vir",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/cv/vir/train.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "cv - vit",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/cv/vit/vit_torch.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
@@ -33,15 +69,6 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/src/gnns/gnns.py",
-            "console": "integratedTerminal",
-            "env": {"PYTHONPATH": "${workspaceFolder}"},
-            "justMyCode": true
-        },
-        {
-            "name": "lm compression",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/nlp/lm_is_compression/lm_is_compression.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
@@ -74,6 +101,15 @@
             "justMyCode": true
         },
         {
+            "name": "nlp - lm compression",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/nlp/lm_is_compression/lm_is_compression.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
             "name": "nlp - original",
             "type": "python",
             "request": "launch",
@@ -97,37 +133,10 @@
             "justMyCode": true
         },
         {
-            "name": "normalizing flows",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/cv/nf/normalizing_flows.py",
-            "console": "integratedTerminal",
-            "env": {"PYTHONPATH": "${workspaceFolder}"},
-            "justMyCode": true
-        },
-        {
             "name": "ppo",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/src/rl/ppo/ppo.py",
-            "console": "integratedTerminal",
-            "env": {"PYTHONPATH": "${workspaceFolder}"},
-            "justMyCode": true
-        },
-        {
-            "name": "vir",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/cv/vir/train.py",
-            "console": "integratedTerminal",
-            "env": {"PYTHONPATH": "${workspaceFolder}"},
-            "justMyCode": true
-        },
-        {
-            "name": "vit",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/cv/vit/vit_torch.py",
             "console": "integratedTerminal",
             "env": {"PYTHONPATH": "${workspaceFolder}"},
             "justMyCode": true
