@@ -133,7 +133,16 @@
             "justMyCode": true
         },
         {
-            "name": "ppo",
+            "name": "rl - dqn",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/rl/dqn/main.py",
+            "console": "integratedTerminal",
+            "env": {"PYTHONPATH": "${workspaceFolder}"},
+            "justMyCode": true
+        },
+        {
+            "name": "rl - ppo",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/src/rl/ppo/ppo.py",

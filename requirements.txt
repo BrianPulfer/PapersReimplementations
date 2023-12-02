@@ -3,8 +3,8 @@ apache_beam
 datasets
 deepspeed
 einops
-gym
-gym[classic_control]
+gymnasium
+gymnasium[Box2D]
 imageio
 matplotlib
 mwparserfromhell

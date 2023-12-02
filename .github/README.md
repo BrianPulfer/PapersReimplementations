@@ -18,10 +18,12 @@ Current re-implementations include:
 | [Density estimation using Real NVP](https://arxiv.org/abs/1605.08803)| [Code](/src/cv/nf/) |
 | [Idempotent Generative Network](https://arxiv.org/abs/2311.01462)| [Code](/src/cv/ign/) | *Coming soon*
 |[ViR: Vision Retention Networks](https://arxiv.org/abs/2310.19731)|[Code](/src/cv/vir/)| *Coming soon*
+| <b>Reinforcement Learning</b> |
+|[Proximal Policy Optimization Algorithms](https://arxiv.org/abs/1707.06347)| [Code](/src/ppo/) | [Blog](https://www.brianpulfer.ch/blog/ppo) |
+| [Playing Atari with Deep Reinforcement Learning](https://arxiv.org/abs/1312.5602) | [Code](/src/rl/dqn/) | *Coming soon* |
 | <b>Others</b> |
 |[Everything is Connected: Graph Neural Networks](https://arxiv.org/abs/2301.08210)| [Code](/src/gnns/) |
 |[Fast Feedforward Networks](https://arxiv.org/abs/2308.14711)| [Code](/src/fff/) |
-|[Proximal Policy Optimization Algorithms](https://arxiv.org/abs/1707.06347)| [Code](/src/ppo/) | [Blog](https://www.brianpulfer.ch/blog/ppo)
 
 
 # Contributing
