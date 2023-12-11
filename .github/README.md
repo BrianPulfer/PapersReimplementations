@@ -17,7 +17,7 @@ Current re-implementations include:
 |[Denoising Diffusion Probabilistic Models](https://arxiv.org/abs/2006.11239) | [Code](/src/cv/ddpm/) | [Blog](https://www.brianpulfer.ch/blog/ddpm)
 | [Density estimation using Real NVP](https://arxiv.org/abs/1605.08803)| [Code](/src/cv/nf/) |
 | [Idempotent Generative Network](https://arxiv.org/abs/2311.01462)| [Code](/src/cv/ign/) | *Coming soon*
-|[ViR: Vision Retention Networks](https://arxiv.org/abs/2310.19731)|[Code](/src/cv/vir/)| *Coming soon*
+|[ViR: Vision Retention Networks](https://arxiv.org/abs/2310.19731)|[Code](/src/cv/vir/)| [Blog](https://brianpulfer.ch/blog/vir)
 | <b>Reinforcement Learning</b> |
 |[Proximal Policy Optimization Algorithms](https://arxiv.org/abs/1707.06347)| [Code](/src/ppo/) | [Blog](https://www.brianpulfer.ch/blog/ppo) |
 | [Playing Atari with Deep Reinforcement Learning](https://arxiv.org/abs/1312.5602) | [Code](/src/rl/dqn/) | *Coming soon* |
