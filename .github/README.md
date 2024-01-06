@@ -16,7 +16,7 @@ Current re-implementations include:
 |[An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale](https://arxiv.org/abs/2010.11929)| [Code](/src/cv/vit/) | [Blog](https://www.brianpulfer.ch/blog/vit)
 |[Denoising Diffusion Probabilistic Models](https://arxiv.org/abs/2006.11239) | [Code](/src/cv/ddpm/) | [Blog](https://www.brianpulfer.ch/blog/ddpm)
 | [Density estimation using Real NVP](https://arxiv.org/abs/1605.08803)| [Code](/src/cv/nf/) |
-| [Idempotent Generative Network](https://arxiv.org/abs/2311.01462)| [Code](/src/cv/ign/) | *Coming soon*
+| [Idempotent Generative Network](https://arxiv.org/abs/2311.01462)| [Code](/src/cv/ign/) | [Blog](https://brianpulfer.ch/blog/ign)
 |[ViR: Vision Retention Networks](https://arxiv.org/abs/2310.19731)|[Code](/src/cv/vir/)| [Blog](https://brianpulfer.ch/blog/vir)
 | <b>Reinforcement Learning</b> |
 |[Proximal Policy Optimization Algorithms](https://arxiv.org/abs/1707.06347)| [Code](/src/ppo/) | [Blog](https://www.brianpulfer.ch/blog/ppo) |
